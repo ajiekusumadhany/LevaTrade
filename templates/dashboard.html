@@ -1,0 +1,1985 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LevaTrade | Auto Trading Assistant</title>
+    <script src="https://cdn.socket.io/4.5.0/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://widgets.coingecko.com/gecko-coin-price-marquee-widget.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary-bg: #0f0f23;
+            --secondary-bg: #1a1a2e;
+            --accent-bg: #16213e;
+            --yellow: #ffd700;
+            --green: #00ff88;
+            --red: #ff4757;
+            --blue: #3742fa;
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0a0;
+            --sidebar-width: 250px;
+        }
+        
+        body {
+            background: linear-gradient(135deg, var(--primary-bg) 0%, var(--secondary-bg) 100%);
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+        }
+        
+        .sidebar {
+            width: var(--sidebar-width);
+            background: linear-gradient(180deg, var(--secondary-bg) 0%, var(--accent-bg) 100%);
+            border-right: 2px solid rgba(255, 215, 0, 0.3);
+            box-shadow: 4px 0 20px rgba(0, 0, 0, 0.3);
+            transition: transform 0.3s ease, width 0.3s ease;
+        }
+        
+        .sidebar.collapsed {
+            width: 80px;
+        }
+        
+        .sidebar.collapsed .sidebar-text {
+            display: none;
+        }
+        
+        .sidebar.collapsed .bot-status-text {
+            display: none;
+        }
+        
+        .sidebar.collapsed .bot-status {
+            padding: 1rem;
+            text-align: center;
+        }
+        
+        .sidebar.collapsed .bot-status .status-indicator {
+            justify-content: center;
+            margin-bottom: 0;
+        }
+        
+        .sidebar.collapsed .bot-status .status-indicator span:first-child {
+            display: none;
+        }
+        
+        .sidebar-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 40;
+        }
+        
+        .mobile-header {
+            display: none;
+            background: var(--secondary-bg);
+            border-bottom: 2px solid rgba(255, 215, 0, 0.3);
+            padding: 1rem;
+            position: sticky;
+            top: 0;
+            z-index: 30;
+        }
+        
+        .hamburger-btn {
+            background: none;
+            border: none;
+            color: var(--yellow);
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 0.5rem;
+            border-radius: 0.5rem;
+            transition: background 0.3s ease;
+        }
+        
+        .hamburger-btn:hover {
+            background: rgba(255, 215, 0, 0.1);
+        }
+        
+        /* Mobile Responsive */
+        @media (max-width: 768px) {
+            .sidebar {
+                position: fixed;
+                top: 0;
+                left: 0;
+                height: 100vh;
+                z-index: 50;
+                transform: translateX(-100%);
+            }
+            
+            .sidebar.open {
+                transform: translateX(0);
+            }
+            
+            .sidebar-overlay.show {
+                display: block;
+            }
+            
+            .mobile-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }
+            
+            .main-content {
+                margin-left: 0 !important;
+                padding-top: 0;
+            }
+            
+            .container {
+                padding: 1rem !important;
+            }
+            
+            /* Adjust cards for mobile */
+            .metric-card {
+                min-height: auto !important;
+            }
+            
+            .grid {
+                grid-template-columns: 1fr !important;
+                gap: 1rem !important;
+            }
+            
+            /* Mobile table */
+            .table-container {
+                overflow-x: auto;
+            }
+            
+            table {
+                min-width: 600px;
+            }
+            
+            /* Pagination Mobile */
+            .pagination-mobile {
+                flex-direction: column;
+                gap: 1rem;
+            }
+            
+            .pagination-mobile .pagination-info {
+                text-align: center;
+            }
+            
+            .pagination-mobile .pagination-buttons {
+                justify-content: center;
+                flex-wrap: wrap;
+                gap: 0.5rem;
+            }
+            
+            /* AI Chat Modal Mobile */
+            #aiChatModal .bg-gray-900 {
+                margin: 1rem;
+                max-height: 90vh;
+            }
+            
+            .quick-action-btn {
+                font-size: 10px;
+                padding: 6px 12px;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .container {
+                padding: 0.5rem !important;
+            }
+            
+            .card {
+                padding: 1rem !important;
+            }
+            
+            .text-2xl {
+                font-size: 1.25rem !important;
+            }
+            
+            .text-xl {
+                font-size: 1.125rem !important;
+            }
+        }
+        
+        .sidebar-item {
+            transition: all 0.3s ease;
+            border-left: 4px solid transparent;
+        }
+        
+        .sidebar-item:hover {
+            background: rgba(255, 215, 0, 0.1);
+            border-left-color: var(--yellow);
+        }
+        
+        .sidebar-item.active {
+            background: rgba(255, 215, 0, 0.2);
+            border-left-color: var(--yellow);
+        }
+        
+        .main-content {
+            margin-left: var(--sidebar-width);
+            transition: margin-left 0.3s ease;
+        }
+        
+        .main-content.sidebar-collapsed {
+            margin-left: 80px;
+        }
+        
+        .card {
+            background: rgba(26, 26, 46, 0.8);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 215, 0, 0.2);
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+        
+        .metric-card {
+            background: linear-gradient(135deg, var(--accent-bg) 0%, var(--secondary-bg) 100%);
+            border: 1px solid rgba(255, 215, 0, 0.3);
+            transition: all 0.3s ease;
+        }
+        
+        .metric-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 40px rgba(255, 215, 0, 0.2);
+        }
+        
+        .profit { color: var(--green); }
+        .loss { color: var(--red); }
+        .neutral { color: var(--yellow); }
+        
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        
+        .glow {
+            box-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+        }
+        
+        .table-row:hover {
+            background: rgba(255, 215, 0, 0.1);
+        }
+        
+        .status-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        .status-long {
+            background: rgba(0, 255, 136, 0.2);
+            color: var(--green);
+            border: 1px solid var(--green);
+        }
+        
+        .status-short {
+            background: rgba(255, 71, 87, 0.2);
+            color: var(--red);
+            border: 1px solid var(--red);
+        }
+        
+        .chart-container {
+            position: relative;
+            height: 300px;
+        }
+        
+        .mode-badge {
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .mode-dry-run {
+            background: rgba(255, 215, 0, 0.2);
+            color: var(--yellow);
+            border: 1px solid var(--yellow);
+        }
+        
+        .mode-real-trade {
+            background: rgba(255, 71, 87, 0.2);
+            color: var(--red);
+            border: 1px solid var(--red);
+        }
+        
+        /* AI Chat Styles */
+        .quick-action-btn {
+            background: rgba(13, 148, 137, 0.2);
+            border: 1px solid rgba(13, 148, 137, 0.5);
+            color: #14b8a6;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 12px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .quick-action-btn:hover {
+            background: rgba(13, 148, 137, 0.3);
+            border-color: #14b8a6;
+        }
+        
+        .chat-message {
+            margin-bottom: 16px;
+            animation: fadeIn 0.3s ease-in;
+        }
+        
+        .chat-message.user {
+            text-align: right;
+        }
+        
+        .chat-message.ai {
+            text-align: left;
+        }
+        
+        .message-bubble {
+            display: inline-block;
+            max-width: 80%;
+            padding: 12px 16px;
+            border-radius: 18px;
+            word-wrap: break-word;
+        }
+        
+        .message-bubble.user {
+            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+            color: white;
+        }
+        
+        .message-bubble.ai {
+            background: rgba(13, 148, 137, 0.2);
+            border: 1px solid rgba(13, 148, 137, 0.3);
+            color: #e5e7eb;
+        }
+        
+        .typing-indicator {
+            display: flex;
+            align-items: center;
+            space-x: 4px;
+            color: #14b8a6;
+        }
+        
+        .typing-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #14b8a6;
+            animation: typing 1.4s infinite ease-in-out;
+        }
+        
+        .typing-dot:nth-child(1) { animation-delay: -0.32s; }
+        .typing-dot:nth-child(2) { animation-delay: -0.16s; }
+        
+        @keyframes typing {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1); }
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+    <!-- Mobile Header -->
+    <div class="mobile-header">
+        <button class="hamburger-btn" onclick="toggleSidebar()">
+            <i class="fas fa-bars"></i>
+        </button>
+        <div class="flex items-center space-x-2">
+            <i class="fas fa-chart-line text-yellow-500 text-xl"></i>
+            <h1 class="text-lg font-bold text-yellow-500">Trading Bot</h1>
+        </div>
+        <div class="text-right">
+            <span class="text-sm text-gray-400" id="mobile-current-time"></span>
+        </div>
+    </div>
+
+    <!-- Sidebar Overlay -->
+    <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+
+    <!-- Sidebar -->
+    <div class="sidebar fixed left-0 top-0 h-full z-40" id="sidebar">
+        <div class="p-6">
+            <div class="flex items-center justify-between mb-8">
+                <div class="flex items-center space-x-3">
+                    <i class="fas fa-chart-line text-yellow-500 text-2xl sidebar-icon"></i>
+                    <h1 class="text-xl font-bold text-yellow-500 sidebar-text">Trading Bot</h1>
+                </div>
+                <!-- Desktop Toggle Button -->
+                <button class="hidden lg:block text-gray-400 hover:text-yellow-500 transition-colors" onclick="toggleSidebarDesktop()" id="desktop-toggle">
+                    <i class="fas fa-chevron-left text-lg"></i>
+                </button>
+            </div>
+            
+            <nav class="space-y-2">
+                <div class="sidebar-item active p-4 rounded-lg cursor-pointer" onclick="switchMode('dry-run')" id="nav-dry-run" title="Dry Run Mode">
+                    <div class="flex items-center space-x-3">
+                        <i class="fas fa-flask text-yellow-500 sidebar-icon"></i>
+                        <div class="sidebar-text">
+                            <div class="font-semibold">Dry Run</div>
+                            <div class="text-xs text-gray-400">Simulation Mode</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="sidebar-item p-4 rounded-lg cursor-pointer" onclick="switchMode('real-trade')" id="nav-real-trade" title="Real Trade Mode">
+                    <div class="flex items-center space-x-3">
+                        <i class="fas fa-dollar-sign text-red-500 sidebar-icon"></i>
+                        <div class="sidebar-text">
+                            <div class="font-semibold">Real Trade</div>
+                            <div class="text-xs text-gray-400">Live Trading</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="sidebar-item p-4 rounded-lg cursor-pointer" onclick="toggleAIChat()" id="nav-ai-chat" title="AI Assistant">
+                    <div class="flex items-center space-x-3">
+                        <i class="fas fa-robot text-teal-500 sidebar-icon"></i>
+                        <div class="sidebar-text">
+                            <div class="font-semibold">AI Assistant</div>
+                            <div class="text-xs text-gray-400">Analisis Pasar & Chat</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <hr class="border-gray-700 my-4">
+                
+                <div class="sidebar-item p-4 rounded-lg cursor-pointer" onclick="showSettings()" title="Settings">
+                    <div class="flex items-center space-x-3">
+                        <i class="fas fa-cog text-blue-500 sidebar-icon"></i>
+                        <div class="sidebar-text">
+                            <div class="font-semibold">Settings</div>
+                            <div class="text-xs text-gray-400">Bot Configuration</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="sidebar-item p-4 rounded-lg cursor-pointer" onclick="showLogs()" title="Logs">
+                    <div class="flex items-center space-x-3">
+                        <i class="fas fa-terminal text-green-500 sidebar-icon"></i>
+                        <div class="sidebar-text">
+                            <div class="font-semibold">Logs</div>
+                            <div class="text-xs text-gray-400">Bot Activity</div>
+                        </div>
+                    </div>
+                </div>
+            </nav>
+        </div>
+        
+        <!-- Bot Status -->
+        <div class="absolute bottom-0 left-0 right-0 p-6 border-t border-gray-700 bot-status">
+            <div class="text-sm">
+                <div class="flex items-center justify-between mb-2 status-indicator">
+                    <span class="text-gray-400 bot-status-text">Bot Status</span>
+                    <div class="flex items-center space-x-2">
+                        <div class="w-2 h-2 bg-green-500 rounded-full pulse"></div>
+                        <span class="text-green-500 text-xs">ACTIVE</span>
+                    </div>
+                </div>
+                <div class="text-xs text-gray-500 bot-status-text" id="bot-info">
+                    Scanning 100 USDT pairs (Top by volume & OI)
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content" id="main-content">
+        <!-- Header -->
+        <header class="bg-gray-900 border-b border-yellow-500/30 p-4">
+            <div class="flex justify-between items-center">
+                <div class="flex items-center space-x-4">
+                    <h2 class="text-2xl font-bold text-white" id="dashboard-title">Dry Run Dashboard</h2>
+                    <span class="mode-badge mode-dry-run" id="mode-badge">Simulation Mode</span>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <div class="flex items-center space-x-2">
+                        <div class="w-3 h-3 bg-green-500 rounded-full pulse"></div>
+                        <span class="text-sm text-gray-300">Live</span>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-sm text-gray-400" id="current-time"></span>
+                        <div class="text-xs text-gray-500" id="last-update">Last update: --:--:--</div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <div class="container mx-auto p-6 space-y-6" id="dashboard-content">
+            <!-- Content will be loaded by JavaScript -->
+        </div>
+    </div>
+
+    <!-- Indicator Details Modal -->
+    <div id="indicatorModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
+        <div class="bg-gray-900 rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-semibold text-yellow-500">
+                    <i class="fas fa-chart-bar mr-2"></i>Technical Indicators Analysis
+                </h3>
+                <button onclick="closeIndicatorModal()" class="text-gray-400 hover:text-white">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            
+            <div class="mb-4">
+                <h4 class="text-lg font-semibold text-white mb-2" id="modalTradeInfo"></h4>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Passed Indicators -->
+                <div class="card p-4">
+                    <h5 class="text-green-500 font-semibold mb-3 flex items-center">
+                        <i class="fas fa-check-circle mr-2"></i>Passed Indicators
+                    </h5>
+                    <div id="passedIndicators" class="space-y-2">
+                        <!-- Will be populated by JavaScript -->
+                    </div>
+                </div>
+                
+                <!-- Failed Indicators -->
+                <div class="card p-4">
+                    <h5 class="text-red-500 font-semibold mb-3 flex items-center">
+                        <i class="fas fa-times-circle mr-2"></i>Failed Indicators
+                    </h5>
+                    <div id="failedIndicators" class="space-y-2">
+                        <!-- Will be populated by JavaScript -->
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Numerical Values -->
+            <div class="card p-4 mt-6">
+                <h5 class="text-blue-500 font-semibold mb-3 flex items-center">
+                    <i class="fas fa-calculator mr-2"></i>Indicator Values
+                </h5>
+                <div id="indicatorValues" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- Will be populated by JavaScript -->
+                </div>
+            </div>
+            
+            <!-- Signal Summary -->
+            <div class="card p-4 mt-6">
+                <h5 class="text-yellow-500 font-semibold mb-3 flex items-center">
+                    <i class="fas fa-lightbulb mr-2"></i>Signal Summary
+                </h5>
+                <div id="signalSummary" class="text-gray-300">
+                    <!-- Will be populated by JavaScript -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI Chat Modal -->
+    <div id="aiChatModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
+        <div class="bg-gray-900 rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[80vh] flex flex-col">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-semibold text-teal-500">
+                    <i class="fas fa-robot mr-2"></i>AI Market Assistant
+                </h3>
+                <button onclick="closeAIChat()" class="text-gray-400 hover:text-white">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            
+            <!-- Mode Indicator -->
+            <div class="mb-4 p-3 bg-gray-800 rounded-lg">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-2">
+                        <i class="fas fa-info-circle text-blue-500"></i>
+                        <span class="text-sm text-gray-300">Mode Saat Ini:</span>
+                        <span class="font-semibold text-yellow-500" id="ai-current-mode">Dry Run</span>
+                    </div>
+                    <div class="text-xs text-gray-400">
+                        AI akan menganalisis data dari mode trading yang dipilih
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Chat Messages -->
+            <div class="flex-1 bg-gray-800 rounded-lg p-4 mb-4 overflow-y-auto" id="chat-messages" style="min-height: 300px; max-height: 400px;">
+                <div class="text-center text-gray-400 py-8">
+                    <i class="fas fa-robot text-4xl mb-4 text-teal-500"></i>
+                    <p>Selamat datang di AI Market Assistant!</p>
+                    <p class="text-sm mt-2">Tanyakan tentang performa trading, kondisi pasar, atau posisi spesifik Anda.</p>
+                    <div class="mt-4 text-xs">
+                        <p><strong>Contoh pertanyaan:</strong></p>
+                        <p>"Bagaimana performa trading saya saat ini?"</p>
+                        <p>"Analisis posisi BTCUSDT saya"</p>
+                        <p>"Mengapa trade terakhir saya kena stop loss?"</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Quick Actions -->
+            <div class="mb-4">
+                <div class="flex flex-wrap gap-2">
+                    <button onclick="sendQuickMessage('Bagaimana performa trading saya saat ini?')" class="quick-action-btn">
+                        📊 Performa
+                    </button>
+                    <button onclick="sendQuickMessage('Tunjukkan posisi terbuka saya')" class="quick-action-btn">
+                        📈 Posisi
+                    </button>
+                    <button onclick="sendQuickMessage('Bagaimana sentimen pasar saat ini?')" class="quick-action-btn">
+                        🌍 Pasar
+                    </button>
+                    <button onclick="sendQuickMessage('Analisis riwayat trading terbaru saya')" class="quick-action-btn">
+                        📋 Riwayat
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Chat Input -->
+            <div class="flex space-x-2">
+                <input 
+                    type="text" 
+                    id="chat-input" 
+                    placeholder="Tanyakan apa saja tentang trading Anda..." 
+                    class="flex-1 bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-teal-500"
+                    onkeypress="handleChatKeyPress(event)"
+                >
+                <button 
+                    onclick="sendChatMessage()" 
+                    class="bg-teal-600 hover:bg-teal-700 text-white px-6 py-2 rounded-lg transition-colors"
+                    id="send-btn"
+                >
+                    <i class="fas fa-paper-plane"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Socket.IO connection
+        const socket = io();
+        
+        // Charts
+        let balanceChart, pnlChart;
+        
+        // Current mode
+        let currentMode = 'dry-run';
+        
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            loadDashboardContent();
+            updateTime();
+            setInterval(updateTime, 1000);
+            
+            // Auto refresh dashboard setiap 30 detik (backup untuk Socket.IO)
+            setInterval(() => {
+                console.log('🔄 Auto refresh dashboard data...');
+                loadInitialData();
+                updateLastRefresh(); // Update timestamp untuk auto refresh
+            }, 30000); // 30 seconds
+        });
+        
+        // Socket event handlers
+        socket.on('positions_update', function(update) {
+            // Hanya update jika mode sesuai dengan yang aktif
+            if (update.mode === currentMode) {
+                updateOpenPositions(update.data);
+                updateLastRefresh(); // Update timestamp
+            }
+        });
+        
+        socket.on('performance_update', function(update) {
+            // Hanya update jika mode sesuai dengan yang aktif
+            if (update.mode === currentMode) {
+                updatePerformanceMetrics(update.data);
+                updateLastRefresh(); // Update timestamp
+            }
+        });
+        
+        socket.on('new_signal', function(signal) {
+            showNewSignalNotification(signal);
+        });
+        
+        function updateTime() {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString();
+            
+            // Update desktop time
+            const desktopTime = document.getElementById('current-time');
+            if (desktopTime) {
+                desktopTime.textContent = timeString;
+            }
+            
+            // Update mobile time
+            const mobileTime = document.getElementById('mobile-current-time');
+            if (mobileTime) {
+                mobileTime.textContent = timeString;
+            }
+        }
+        
+        function updateLastRefresh() {
+            const now = new Date();
+            document.getElementById('last-update').textContent = `Last update: ${now.toLocaleTimeString()}`;
+        }
+        
+        // Mode switching (updated for mobile)
+        function switchModeOriginal(mode) {
+            currentMode = mode;
+            
+            // Update navigation
+            document.querySelectorAll('.sidebar-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            document.getElementById(`nav-${mode}`).classList.add('active');
+            
+            // Update header
+            if (mode === 'dry-run') {
+                document.getElementById('dashboard-title').textContent = 'Dry Run Dashboard';
+                document.getElementById('mode-badge').textContent = 'Simulation Mode';
+                document.getElementById('mode-badge').className = 'mode-badge mode-dry-run';
+            } else {
+                document.getElementById('dashboard-title').textContent = 'Real Trade Dashboard';
+                document.getElementById('mode-badge').textContent = 'Live Trading';
+                document.getElementById('mode-badge').className = 'mode-badge mode-real-trade';
+            }
+            
+            // Reload data for selected mode with current pagination settings
+            loadInitialData();
+            loadHistory(currentLimit, 1); // Reset to page 1 when switching modes
+            
+            // Close sidebar on mobile
+            if (window.innerWidth <= 768) {
+                closeSidebar();
+            }
+        }
+        
+        function showSettings() {
+            alert('Settings panel coming soon!');
+        }
+        
+        function showLogs() {
+            alert('Logs panel coming soon!');
+        }
+        
+        // AI Chat Functions
+        function toggleAIChat() {
+            const modal = document.getElementById('aiChatModal');
+            const modeIndicator = document.getElementById('ai-current-mode');
+            
+            // Update mode indicator
+            modeIndicator.textContent = currentMode === 'dry-run' ? 'Simulasi (Dry Run)' : 'Trading Nyata';
+            
+            // Show modal
+            modal.classList.remove('hidden');
+            
+            // Focus on input
+            setTimeout(() => {
+                document.getElementById('chat-input').focus();
+            }, 100);
+        }
+        
+        function closeAIChat() {
+            document.getElementById('aiChatModal').classList.add('hidden');
+        }
+        
+        function handleChatKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendChatMessage();
+            }
+        }
+        
+        function sendQuickMessage(message) {
+            document.getElementById('chat-input').value = message;
+            sendChatMessage();
+        }
+        
+        async function sendChatMessage() {
+            const input = document.getElementById('chat-input');
+            const message = input.value.trim();
+            
+            if (!message) return;
+            
+            // Clear input
+            input.value = '';
+            
+            // Add user message to chat
+            addChatMessage(message, 'user');
+            
+            // Show typing indicator
+            showTypingIndicator();
+            
+            try {
+                // Send message to AI
+                const response = await fetch('/api/ai/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        mode: currentMode.replace('-', '_'), // Convert 'dry-run' to 'dry_run'
+                        context: {}
+                    })
+                });
+                
+                const data = await response.json();
+                
+                // Remove typing indicator
+                removeTypingIndicator();
+                
+                if (data.success) {
+                    // Add AI response to chat
+                    addChatMessage(data.ai_response, 'ai');
+                } else {
+                    // Add error message
+                    addChatMessage('Sorry, I encountered an error: ' + (data.error || 'Unknown error'), 'ai', true);
+                }
+                
+            } catch (error) {
+                console.error('Chat error:', error);
+                removeTypingIndicator();
+                addChatMessage('Sorry, I\'m having trouble connecting right now. Please try again.', 'ai', true);
+            }
+        }
+        
+        function addChatMessage(message, sender, isError = false) {
+            const chatMessages = document.getElementById('chat-messages');
+            
+            // Remove welcome message if it exists
+            const welcomeMsg = chatMessages.querySelector('.text-center');
+            if (welcomeMsg) {
+                welcomeMsg.remove();
+            }
+            
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `chat-message ${sender}`;
+            
+            const bubbleDiv = document.createElement('div');
+            bubbleDiv.className = `message-bubble ${sender}`;
+            
+            if (isError) {
+                bubbleDiv.style.background = 'rgba(239, 68, 68, 0.2)';
+                bubbleDiv.style.borderColor = 'rgba(239, 68, 68, 0.5)';
+            }
+            
+            // Format message (convert markdown-like formatting)
+            let formattedMessage = message
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                .replace(/\n/g, '<br>');
+            
+            bubbleDiv.innerHTML = formattedMessage;
+            
+            // Add timestamp for AI messages
+            if (sender === 'ai') {
+                const timestamp = document.createElement('div');
+                timestamp.className = 'text-xs text-gray-500 mt-1';
+                timestamp.textContent = new Date().toLocaleTimeString();
+                bubbleDiv.appendChild(timestamp);
+            }
+            
+            messageDiv.appendChild(bubbleDiv);
+            chatMessages.appendChild(messageDiv);
+            
+            // Scroll to bottom
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+        
+        function showTypingIndicator() {
+            const chatMessages = document.getElementById('chat-messages');
+            
+            const typingDiv = document.createElement('div');
+            typingDiv.className = 'chat-message ai';
+            typingDiv.id = 'typing-indicator';
+            
+            const bubbleDiv = document.createElement('div');
+            bubbleDiv.className = 'message-bubble ai typing-indicator';
+            bubbleDiv.innerHTML = `
+                <span>AI is thinking</span>
+                <div class="flex space-x-1 ml-2">
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                </div>
+            `;
+            
+            typingDiv.appendChild(bubbleDiv);
+            chatMessages.appendChild(typingDiv);
+            
+            // Scroll to bottom
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+        
+        function removeTypingIndicator() {
+            const typingIndicator = document.getElementById('typing-indicator');
+            if (typingIndicator) {
+                typingIndicator.remove();
+            }
+        }
+        
+        // Close AI chat modal when clicking outside
+        document.addEventListener('click', function(e) {
+            const modal = document.getElementById('aiChatModal');
+            if (e.target === modal) {
+                closeAIChat();
+            }
+        });
+        
+        // Desktop Sidebar Toggle Functions
+        function toggleSidebarDesktop() {
+            const sidebar = document.getElementById('sidebar');
+            const mainContent = document.getElementById('main-content');
+            const toggleIcon = document.querySelector('#desktop-toggle i');
+            
+            sidebar.classList.toggle('collapsed');
+            mainContent.classList.toggle('sidebar-collapsed');
+            
+            // Update toggle icon
+            if (sidebar.classList.contains('collapsed')) {
+                toggleIcon.className = 'fas fa-chevron-right text-lg';
+            } else {
+                toggleIcon.className = 'fas fa-chevron-left text-lg';
+            }
+        }
+        
+        // Mobile Sidebar Functions
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebar-overlay');
+            
+            sidebar.classList.toggle('open');
+            overlay.classList.toggle('show');
+        }
+        
+        function closeSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebar-overlay');
+            
+            sidebar.classList.remove('open');
+            overlay.classList.remove('show');
+        }
+        
+        // Close sidebar when clicking menu items on mobile
+        function switchMode(mode) {
+            // Call original function
+            switchModeOriginal(mode);
+        }
+        
+        // Update mobile time
+        function updateMobileTime() {
+            const mobileTimeElement = document.getElementById('mobile-current-time');
+            if (mobileTimeElement) {
+                mobileTimeElement.textContent = new Date().toLocaleTimeString();
+            }
+        }
+        
+        // Handle window resize
+        window.addEventListener('resize', function() {
+            if (window.innerWidth > 768) {
+                // Desktop mode - ensure sidebar is visible and overlay is hidden
+                const sidebar = document.getElementById('sidebar');
+                const overlay = document.getElementById('sidebar-overlay');
+                
+                sidebar.classList.remove('open');
+                overlay.classList.remove('show');
+            }
+            
+            // Update pagination layout if it exists
+            const paginationContainer = document.getElementById('pagination-container');
+            if (paginationContainer && paginationContainer.innerHTML.trim() !== '') {
+                // Re-render pagination with current settings
+                const currentPageFromButton = document.querySelector('.bg-yellow-500.text-black');
+                if (currentPageFromButton) {
+                    const pageNum = parseInt(currentPageFromButton.textContent);
+                    loadHistory(currentLimit, pageNum);
+                }
+            }
+        });
+        
+        // Initialize mobile time update
+        setInterval(updateMobileTime, 1000);
+        updateMobileTime();
+        
+        function loadDashboardContent() {
+            const content = document.getElementById('dashboard-content');
+            content.innerHTML = `
+                <!-- Performance Metrics -->
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <div class="metric-card card p-6">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-gray-400 text-sm">Total Balance</p>
+                                <p class="text-2xl font-bold text-yellow-500" id="total-balance">$1,000.00</p>
+                            </div>
+                            <i class="fas fa-wallet text-yellow-500 text-2xl"></i>
+                        </div>
+                        <div class="mt-2">
+                            <span class="text-sm" id="balance-change">+$0.00 (0.00%)</span>
+                        </div>
+                    </div>
+
+                    <div class="metric-card card p-6">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-gray-400 text-sm">Total PnL</p>
+                                <p class="text-2xl font-bold" id="total-pnl">$0.00</p>
+                            </div>
+                            <i class="fas fa-chart-line text-green-500 text-2xl"></i>
+                        </div>
+                        <div class="mt-2">
+                            <span class="text-sm text-gray-400">Unrealized: <span id="unrealized-pnl">$0.00</span></span>
+                        </div>
+                    </div>
+
+                    <div class="metric-card card p-6">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-gray-400 text-sm">Win Rate</p>
+                                <p class="text-2xl font-bold text-blue-500" id="win-rate">0%</p>
+                            </div>
+                            <i class="fas fa-target text-blue-500 text-2xl"></i>
+                        </div>
+                        <div class="mt-2">
+                            <span class="text-sm text-gray-400"><span id="winning-trades">0</span>W / <span id="losing-trades">0</span>L</span>
+                        </div>
+                    </div>
+
+                    <div class="metric-card card p-6">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-gray-400 text-sm">Max Drawdown</p>
+                                <p class="text-2xl font-bold text-red-500" id="max-drawdown">0%</p>
+                            </div>
+                            <i class="fas fa-arrow-down text-red-500 text-2xl"></i>
+                        </div>
+                        <div class="mt-2">
+                            <span class="text-sm text-gray-400">Profit Factor: <span id="profit-factor">0.00</span></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Margin Info -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
+                    <div class="metric-card card p-6">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-gray-400 text-sm">Margin Used</p>
+                                <p class="text-xl font-bold text-orange-500" id="margin-used">$0.00</p>
+                            </div>
+                            <i class="fas fa-coins text-orange-500 text-2xl"></i>
+                        </div>
+                        <div class="mt-2">
+                            <span class="text-sm text-gray-400">Usage: <span id="margin-usage-percent">0%</span></span>
+                        </div>
+                    </div>
+
+                    <div class="metric-card card p-6">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-gray-400 text-sm">Available Margin</p>
+                                <p class="text-xl font-bold text-green-500" id="available-margin">$1,000.00</p>
+                            </div>
+                            <i class="fas fa-piggy-bank text-green-500 text-2xl"></i>
+                        </div>
+                        <div class="mt-2">
+                            <span class="text-sm text-gray-400">For new positions</span>
+                        </div>
+                    </div>
+
+                    <div class="metric-card card p-6">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-gray-400 text-sm">Open Positions</p>
+                                <p class="text-xl font-bold text-cyan-500" id="open-positions-count-header">0</p>
+                            </div>
+                            <i class="fas fa-list text-cyan-500 text-2xl"></i>
+                        </div>
+                        <div class="mt-2">
+                            <span class="text-sm text-gray-400">Max: 20 positions</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Charts Row -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <!-- Balance Chart -->
+                    <div class="card p-6">
+                        <h3 class="text-xl font-semibold mb-4 text-yellow-500">
+                            <i class="fas fa-chart-area mr-2"></i>Balance Performance
+                        </h3>
+                        <div class="chart-container">
+                            <canvas id="balanceChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- PnL Distribution -->
+                    <div class="card p-6">
+                        <h3 class="text-xl font-semibold mb-4 text-yellow-500">
+                            <i class="fas fa-chart-pie mr-2"></i>PnL Distribution
+                        </h3>
+                        <div class="chart-container">
+                            <canvas id="pnlChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Open Positions -->
+                <div class="card p-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <div>
+                            <h3 class="text-xl font-semibold text-yellow-500">
+                                <i class="fas fa-coins mr-2"></i>Open Positions
+                            </h3>
+                            <p class="text-xs text-gray-400 mt-1">
+                                <i class="fas fa-sort-amount-down mr-1"></i>Sorted by newest first
+                            </p>
+                        </div>
+                        <span class="bg-blue-500 text-white px-3 py-1 rounded-full text-sm" id="open-positions-count">0</span>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full">
+                            <thead>
+                                <tr class="border-b border-gray-700">
+                                    <th class="text-left py-3 px-4 text-gray-400">Symbol</th>
+                                    <th class="text-left py-3 px-4 text-gray-400">Arah</th>
+                                    <th class="text-left py-3 px-4 text-gray-400">Harga Entry</th>
+                                    <th class="text-left py-3 px-4 text-gray-400">Harga Saat Ini</th>
+                                    <th class="text-left py-3 px-4 text-gray-400">Ukuran</th>
+                                    <th class="text-left py-3 px-4 text-gray-400">Leverage</th>
+                                    <th class="text-left py-3 px-4 text-gray-400">TP/SL</th>
+                                    <th class="text-left py-3 px-4 text-gray-400">Unrealized PnL</th>
+                                    <th class="text-left py-3 px-4 text-gray-400">Durasi</th>
+                                    <th class="text-left py-3 px-4 text-gray-400">Detail</th>
+                                </tr>
+                            </thead>
+                            <tbody id="open-positions-table">
+                                <tr>
+                                    <td colspan="9" class="text-center py-8 text-gray-500">No open positions</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Trade History -->
+                <div class="card p-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-xl font-semibold text-yellow-500">
+                            <i class="fas fa-history mr-2"></i>Trade History
+                        </h3>
+                        <div class="flex space-x-2">
+                            <button id="btn-last-10" class="bg-yellow-500 text-black px-4 py-2 rounded-lg text-sm font-semibold hover:bg-yellow-400 transition-colors" onclick="loadHistory(10, 1)">
+                                Last 10
+                            </button>
+                            <button id="btn-last-50" class="bg-gray-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-gray-500 transition-colors" onclick="loadHistory(50, 1)">
+                                Last 50
+                            </button>
+                            <button id="btn-last-100" class="bg-gray-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-gray-500 transition-colors" onclick="loadHistory(100, 1)">
+                                Last 100
+                            </button>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full">
+                            <thead>
+                                <tr class="border-b border-gray-700">
+                                    <th class="text-left py-3 px-4 text-gray-400">Symbol</th>
+                                    <th class="text-left py-3 px-4 text-gray-400">Arah</th>
+                                    <th class="text-left py-3 px-4 text-gray-400">Entry/Exit</th>
+                                    <th class="text-left py-3 px-4 text-gray-400">Ukuran</th>
+                                    <th class="text-left py-3 px-4 text-gray-400">Leverage</th>
+                                    <th class="text-left py-3 px-4 text-gray-400">PnL</th>
+                                    <th class="text-left py-3 px-4 text-gray-400">Alasan Exit</th>
+                                    <th class="text-left py-3 px-4 text-gray-400">Durasi</th>
+                                    <th class="text-left py-3 px-4 text-gray-400">Indikator</th>
+                                </tr>
+                            </thead>
+                            <tbody id="trade-history-table">
+                                <tr>
+                                    <td colspan="9" class="text-center py-8 text-gray-500">Belum ada riwayat trading</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <!-- Pagination Container -->
+                    <div id="pagination-container">
+                        <!-- Pagination will be inserted here by JavaScript -->
+                    </div>
+                </div>
+            `;
+            
+            // Reinitialize charts after content is loaded
+            setTimeout(() => {
+                initializeCharts();
+                loadInitialData();
+            }, 100);
+        }
+        
+        function initializeCharts() {
+            // Balance Chart
+            const balanceCtx = document.getElementById('balanceChart').getContext('2d');
+            balanceChart = new Chart(balanceCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Balance',
+                        data: [],
+                        borderColor: '#ffd700',
+                        backgroundColor: 'rgba(255, 215, 0, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: { color: '#ffffff' }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: { color: '#a0a0a0' },
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' }
+                        },
+                        y: {
+                            ticks: { color: '#a0a0a0' },
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' }
+                        }
+                    }
+                }
+            });
+            
+            // PnL Chart
+            const pnlCtx = document.getElementById('pnlChart').getContext('2d');
+            pnlChart = new Chart(pnlCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Winning Trades', 'Losing Trades'],
+                    datasets: [{
+                        data: [0, 0],
+                        backgroundColor: ['#00ff88', '#ff4757'],
+                        borderColor: ['#00ff88', '#ff4757'],
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: { color: '#ffffff' }
+                        }
+                    }
+                }
+            });
+        }
+        
+        function loadInitialData() {
+            const mode = currentMode;
+            console.log('🔄 loadInitialData called for mode:', mode);
+            
+            // Load performance metrics
+            fetch(`/api/performance?mode=${mode}`)
+                .then(response => response.json())
+                .then(data => {
+                    console.log('📊 Performance data loaded:', data);
+                    updatePerformanceMetrics(data);
+                });
+            
+            // Load positions
+            fetch(`/api/positions?mode=${mode}`)
+                .then(response => response.json())
+                .then(data => {
+                    console.log('📊 Positions data loaded:', data.length, 'positions');
+                    updateOpenPositions(data);
+                });
+            
+            // Load history with pagination
+            loadHistory(10, 1);
+            
+            // Load chart data
+            loadChartData();
+        }
+        
+        function updatePerformanceMetrics(metrics) {
+            document.getElementById('total-balance').textContent = `$${metrics.balance.toFixed(2)}`;
+            document.getElementById('total-pnl').textContent = `$${metrics.total_pnl.toFixed(2)}`;
+            document.getElementById('total-pnl').className = `text-2xl font-bold ${metrics.total_pnl >= 0 ? 'profit' : 'loss'}`;
+            
+            const balanceChange = metrics.balance - metrics.starting_balance;
+            const balanceChangePercent = ((balanceChange / metrics.starting_balance) * 100);
+            document.getElementById('balance-change').textContent = `${balanceChange >= 0 ? '+' : ''}$${balanceChange.toFixed(2)} (${balanceChangePercent.toFixed(2)}%)`;
+            document.getElementById('balance-change').className = `text-sm ${balanceChange >= 0 ? 'profit' : 'loss'}`;
+            
+            // Update unrealized PnL
+            const unrealizedPnl = metrics.unrealized_pnl || 0;
+            document.getElementById('unrealized-pnl').textContent = `$${unrealizedPnl.toFixed(2)}`;
+            document.getElementById('unrealized-pnl').className = unrealizedPnl >= 0 ? 'profit' : 'loss';
+            
+            document.getElementById('win-rate').textContent = `${metrics.win_rate.toFixed(1)}%`;
+            document.getElementById('winning-trades').textContent = metrics.winning_trades;
+            document.getElementById('losing-trades').textContent = metrics.losing_trades;
+            document.getElementById('max-drawdown').textContent = `${metrics.max_drawdown.toFixed(2)}%`;
+            document.getElementById('profit-factor').textContent = metrics.profit_factor.toFixed(2);
+            
+            // Update margin info
+            const marginUsed = metrics.total_margin_used || 0;
+            const availableMargin = metrics.available_margin || metrics.balance;
+            const marginUsagePercent = metrics.margin_usage_percent || 0;
+            
+            document.getElementById('margin-used').textContent = `$${marginUsed.toFixed(2)}`;
+            document.getElementById('available-margin').textContent = `$${availableMargin.toFixed(2)}`;
+            document.getElementById('margin-usage-percent').textContent = `${marginUsagePercent.toFixed(1)}%`;
+            // REMOVED: document.getElementById('open-positions-count').textContent = metrics.open_positions_count || 0;
+            // This will be updated by updateOpenPositions() function instead
+            
+            // Update PnL chart
+            pnlChart.data.datasets[0].data = [metrics.winning_trades, metrics.losing_trades];
+            pnlChart.update();
+        }
+        
+        function updateOpenPositions(positions) {
+            console.log('🔄 updateOpenPositions called with:', positions.length, 'positions');
+            const tbody = document.getElementById('open-positions-table');
+            const countElement = document.getElementById('open-positions-count');
+            const countHeaderElement = document.getElementById('open-positions-count-header');
+            
+            console.log('📊 Setting count to:', positions.length);
+            countElement.textContent = positions.length;
+            countHeaderElement.textContent = positions.length;
+            
+            if (positions.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="10" class="text-center py-8 text-gray-500">No open positions</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = positions.map(pos => {
+                const duration = Math.floor((new Date() - new Date(pos.entry_time)) / (1000 * 60));
+                const pnlClass = pos.unrealized_pnl >= 0 ? 'profit' : 'loss';
+                
+                return `
+                    <tr class="table-row border-b border-gray-800">
+                        <td class="py-3 px-4 font-semibold">${pos.symbol}</td>
+                        <td class="py-3 px-4">
+                            <span class="status-badge status-${pos.direction.toLowerCase()}">${pos.direction}</span>
+                        </td>
+                        <td class="py-3 px-4">$${pos.entry_price.toFixed(6)}</td>
+                        <td class="py-3 px-4">$${pos.current_price.toFixed(6)}</td>
+                        <td class="py-3 px-4">${pos.quantity.toFixed(3)}</td>
+                        <td class="py-3 px-4">${pos.leverage}x</td>
+                        <td class="py-3 px-4 text-sm">
+                            <div class="profit">TP: $${pos.tp_price.toFixed(6)}</div>
+                            <div class="loss">SL: $${pos.sl_price.toFixed(6)}</div>
+                        </td>
+                        <td class="py-3 px-4 font-semibold ${pnlClass}">
+                            <div>$${pos.unrealized_pnl.toFixed(2)}</div>
+                            <div class="text-xs">(${pos.pnl_percentage.toFixed(2)}%)</div>
+                        </td>
+                        <td class="py-3 px-4 text-sm text-gray-400">${duration}m</td>
+                        <td class="py-3 px-4 text-xs">
+                            <button onclick="showOpenPositionDetailsAPI('${pos.id}')" 
+                                    class="bg-teal-500 hover:bg-teal-600 text-white px-3 py-1 rounded text-xs transition-colors">
+                                View Details
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+        
+        // Pagination variables
+        let currentPage = 1;
+        let totalPages = 1;
+        let currentLimit = 10;
+        
+        function updateHistoryButtons(activeLimit) {
+            // Reset semua tombol ke gray
+            const buttonIds = ['btn-last-10', 'btn-last-50', 'btn-last-100'];
+            const buttonLimits = [10, 50, 100];
+            
+            buttonIds.forEach((id, index) => {
+                const btn = document.getElementById(id);
+                if (btn) {
+                    if (buttonLimits[index] === activeLimit) {
+                        // Tombol aktif - kuning
+                        btn.className = 'bg-yellow-500 text-black px-4 py-2 rounded-lg text-sm font-semibold hover:bg-yellow-400 transition-colors';
+                    } else {
+                        // Tombol tidak aktif - gray
+                        btn.className = 'bg-gray-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-gray-500 transition-colors';
+                    }
+                }
+            });
+        }
+        
+        function loadHistory(limit = 10, page = 1) {
+            const mode = currentMode;
+            const offset = (page - 1) * limit;
+            
+            // Update button states
+            updateHistoryButtons(limit);
+            
+            fetch(`/api/history?limit=${limit}&offset=${offset}&mode=${mode}`)
+                .then(response => response.json())
+                .then(data => {
+                    updateTradeHistory(data.trades);
+                    updatePagination(data.pagination);
+                    currentPage = page;
+                    currentLimit = limit;
+                });
+        }
+        
+        function updateTradeHistory(trades) {
+            const tbody = document.getElementById('trade-history-table');
+            
+            if (trades.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="9" class="text-center py-8 text-gray-500">Belum ada riwayat trading</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = trades.map(trade => {
+                const pnlClass = trade.pnl >= 0 ? 'profit' : 'loss';
+                
+                return `
+                    <tr class="table-row border-b border-gray-800">
+                        <td class="py-3 px-4 font-semibold">${trade.symbol}</td>
+                        <td class="py-3 px-4">
+                            <span class="status-badge status-${trade.direction.toLowerCase()}">${trade.direction}</span>
+                        </td>
+                        <td class="py-3 px-4 text-sm">
+                            <div>Entry: $${trade.entry_price.toFixed(6)}</div>
+                            <div>Exit: $${trade.exit_price.toFixed(6)}</div>
+                        </td>
+                        <td class="py-3 px-4">${trade.quantity.toFixed(3)}</td>
+                        <td class="py-3 px-4">${trade.leverage}x</td>
+                        <td class="py-3 px-4 font-semibold ${pnlClass}">
+                            <div>$${trade.pnl.toFixed(2)}</div>
+                            <div class="text-xs">(${trade.pnl_percentage.toFixed(2)}%)</div>
+                        </td>
+                        <td class="py-3 px-4">
+                            <span class="px-2 py-1 rounded text-xs ${trade.exit_reason === 'TP_HIT' ? 'bg-green-500' : 'bg-red-500'} text-white">
+                                ${trade.exit_reason}
+                            </span>
+                        </td>
+                        <td class="py-3 px-4 text-sm text-gray-400">${trade.duration_minutes}m</td>
+                        <td class="py-3 px-4 text-xs">
+                            <button onclick="showTradeDetails('${trade.id}')" 
+                                    class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-xs transition-colors">
+                                View Details
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+        
+        function updatePagination(pagination) {
+            const paginationContainer = document.getElementById('pagination-container');
+            if (!paginationContainer) return;
+            
+            totalPages = pagination.total_pages;
+            const currentPage = pagination.current_page;
+            const hasMore = pagination.has_more;
+            const totalCount = pagination.total_count;
+            
+            // Check if mobile
+            const isMobile = window.innerWidth <= 768;
+            const containerClass = isMobile ? 'pagination-mobile' : '';
+            
+            let paginationHTML = `
+                <div class="flex items-center justify-between mt-4 ${containerClass}">
+                    <div class="text-sm text-gray-400 pagination-info">
+                        Menampilkan ${Math.min(currentLimit, totalCount)} dari ${totalCount} trades
+                        (Halaman ${currentPage} dari ${totalPages})
+                    </div>
+                    <div class="flex items-center space-x-2 pagination-buttons">
+            `;
+            
+            // Previous button
+            if (currentPage > 1) {
+                paginationHTML += `
+                    <button onclick="loadHistory(${currentLimit}, ${currentPage - 1})" 
+                            class="bg-gray-600 hover:bg-gray-500 text-white px-3 py-2 rounded text-sm transition-colors">
+                        <i class="fas fa-chevron-left mr-1"></i>${isMobile ? '' : 'Prev'}
+                    </button>
+                `;
+            }
+            
+            // Page numbers (show fewer on mobile)
+            const maxPages = isMobile ? 3 : 5;
+            const startPage = Math.max(1, currentPage - Math.floor(maxPages / 2));
+            const endPage = Math.min(totalPages, startPage + maxPages - 1);
+            
+            // Show first page if not in range
+            if (startPage > 1) {
+                paginationHTML += `
+                    <button onclick="loadHistory(${currentLimit}, 1)" 
+                            class="bg-gray-600 hover:bg-gray-500 text-white px-3 py-2 rounded text-sm transition-colors">
+                        1
+                    </button>
+                `;
+                if (startPage > 2) {
+                    paginationHTML += `<span class="text-gray-400 px-2">...</span>`;
+                }
+            }
+            
+            // Page numbers
+            for (let i = startPage; i <= endPage; i++) {
+                const isActive = i === currentPage;
+                const buttonClass = isActive 
+                    ? 'bg-yellow-500 text-black px-3 py-2 rounded text-sm font-semibold'
+                    : 'bg-gray-600 hover:bg-gray-500 text-white px-3 py-2 rounded text-sm transition-colors';
+                
+                paginationHTML += `
+                    <button onclick="loadHistory(${currentLimit}, ${i})" class="${buttonClass}">
+                        ${i}
+                    </button>
+                `;
+            }
+            
+            // Show last page if not in range
+            if (endPage < totalPages) {
+                if (endPage < totalPages - 1) {
+                    paginationHTML += `<span class="text-gray-400 px-2">...</span>`;
+                }
+                paginationHTML += `
+                    <button onclick="loadHistory(${currentLimit}, ${totalPages})" 
+                            class="bg-gray-600 hover:bg-gray-500 text-white px-3 py-2 rounded text-sm transition-colors">
+                        ${totalPages}
+                    </button>
+                `;
+            }
+            
+            // Next button
+            if (hasMore) {
+                paginationHTML += `
+                    <button onclick="loadHistory(${currentLimit}, ${currentPage + 1})" 
+                            class="bg-gray-600 hover:bg-gray-500 text-white px-3 py-2 rounded text-sm transition-colors">
+                        ${isMobile ? '' : 'Next'}<i class="fas fa-chevron-right ml-1"></i>
+                    </button>
+                `;
+            }
+            
+            paginationHTML += `
+                    </div>
+                </div>
+            `;
+            
+            paginationContainer.innerHTML = paginationHTML;
+        }
+        
+        function loadChartData() {
+            const mode = currentMode;
+            fetch(`/api/chart-data?mode=${mode}`)
+                .then(response => response.json())
+                .then(data => {
+                    const labels = data.map(d => d.date);
+                    const balances = data.map(d => d.balance);
+                    
+                    balanceChart.data.labels = labels;
+                    balanceChart.data.datasets[0].data = balances;
+                    balanceChart.update();
+                });
+        }
+        
+        function showNewSignalNotification(signal) {
+            // Create notification
+            const notification = document.createElement('div');
+            notification.className = 'fixed top-4 right-4 bg-yellow-500 text-black p-4 rounded-lg shadow-lg z-50 glow';
+            notification.innerHTML = `
+                <div class="flex items-center space-x-2">
+                    <i class="fas fa-bell"></i>
+                    <span class="font-semibold">New Signal: ${signal.symbol} ${signal.direction}</span>
+                </div>
+            `;
+            
+            document.body.appendChild(notification);
+            
+            // Remove after 5 seconds
+            setTimeout(() => {
+                notification.remove();
+            }, 5000);
+        }
+        
+        // Trade Details Functions
+        async function showTradeDetails(tradeId) {
+            try {
+                // Fetch trade details via API to avoid escaping issues
+                const response = await fetch(`/api/trade-details/${tradeId}?mode=${currentMode.replace('-', '_')}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    const trade = data.trade;
+                    showIndicatorDetails(
+                        trade.id, 
+                        trade.symbol, 
+                        trade.direction, 
+                        trade.indicators || {}, 
+                        trade.ai_entry_reasoning || '', 
+                        trade.ai_exit_reasoning || ''
+                    );
+                } else {
+                    alert('Error loading trade details: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Error fetching trade details:', error);
+                alert('Error loading trade details. Please try again.');
+            }
+        }
+        
+        // Open Position Details Functions
+        async function showOpenPositionDetailsAPI(positionId) {
+            try {
+                // Get position details from open positions API
+                const response = await fetch(`/api/positions?mode=${currentMode}`);
+                const positions = await response.json();
+                
+                // Find the specific position
+                const position = positions.find(p => p.id === positionId);
+                
+                if (position) {
+                    showIndicatorDetails(
+                        position.id,
+                        position.symbol,
+                        position.direction,
+                        position.indicators || {},
+                        position.ai_entry_reasoning || '',
+                        '' // No exit reasoning for open positions
+                    );
+                } else {
+                    alert('Position not found');
+                }
+            } catch (error) {
+                console.error('Error fetching position details:', error);
+                alert('Error loading position details. Please try again.');
+            }
+        }
+        
+        function showOpenPositionDetails(positionId, symbol, direction, indicators, aiEntryReasoning = '') {
+            // Use the same logic as showIndicatorDetails for consistency
+            showIndicatorDetails(positionId, symbol, direction, indicators, aiEntryReasoning, '');
+        }
+        
+        function showIndicatorDetails(tradeId, symbol, direction, indicators, aiEntryReasoning = '', aiExitReasoning = '') {
+            // Set trade info
+            document.getElementById('modalTradeInfo').textContent = `${symbol} ${direction} Trade Analysis`;
+            
+            // Parse indicators
+            const passedContainer = document.getElementById('passedIndicators');
+            const failedContainer = document.getElementById('failedIndicators');
+            const valuesContainer = document.getElementById('indicatorValues');
+            const summaryContainer = document.getElementById('signalSummary');
+            
+            // Clear containers
+            passedContainer.innerHTML = '';
+            failedContainer.innerHTML = '';
+            valuesContainer.innerHTML = '';
+            
+            // Define indicator descriptions
+            const indicatorDescriptions = {
+                'ema_fast_above_slow': 'EMA Fast > EMA Slow (Trend Direction)',
+                'macd_bullish': 'MACD Line > Signal Line (Momentum)',
+                'rsi_oversold': 'RSI Oversold (<30)',
+                'rsi_overbought': 'RSI Overbought (>70)',
+                'rsi_neutral': 'RSI Neutral Zone (30-70)',
+                'price_near_support': 'Price Near Support Level',
+                'price_near_resistance': 'Price Near Resistance Level',
+                'volume_confirmation': 'Volume Confirmation',
+                'trend_alignment': 'Trend Alignment',
+                'momentum_confirmation': 'Momentum Confirmation',
+                'rsi_level': 'RSI Level',
+                'atr_value': 'Average True Range (Volatility)',
+                'ema_fast_value': 'EMA Fast Value',
+                'ema_slow_value': 'EMA Slow Value',
+                'macd_line_value': 'MACD Line Value',
+                'signal_line_value': 'Signal Line Value',
+                'support_resistance': 'Support/Resistance Level',
+                'price_distance_from_level': 'Distance from Key Level (%)'
+            };
+            
+            // Strategy-based logic - SESUAI KONDISI MARKET YANG MENYEBABKAN SINYAL
+            const passed = [];
+            const failed = [];
+            const values = [];
+            
+            Object.entries(indicators).forEach(([key, value]) => {
+                const description = indicatorDescriptions[key] || key.replace(/_/g, ' ').toUpperCase();
+                
+                if (typeof value === 'boolean') {
+                    let isPassed = false;
+                    let reason = '';
+                    
+                    // STRATEGY ANALYSIS - Berdasarkan kondisi yang benar-benar terjadi
+                    if (direction === 'LONG') {
+                        // LONG Strategy Requirements (dari analyze_symbol):
+                        // Kondisi 1: ema_bullish AND macd_bullish AND rsi_neutral AND volume_ok AND volatility_ok
+                        // Kondisi 2: ema_bullish AND rsi_oversold AND volume_ok
+                        
+                        switch(key) {
+                            case 'ema_fast_above_slow':
+                                isPassed = value; // Harus TRUE untuk LONG (ema_bullish)
+                                reason = value ? 'Bullish trend required for LONG' : 'Need bullish trend for LONG signal';
+                                break;
+                            case 'macd_bullish':
+                                isPassed = value; // Harus TRUE untuk LONG kondisi 1
+                                reason = value ? 'Bullish momentum supports LONG' : 'Bearish momentum (OK if RSI oversold)';
+                                break;
+                            case 'rsi_neutral':
+                                isPassed = value; // TRUE untuk kondisi 1
+                                reason = value ? 'RSI in neutral range (35-65)' : 'RSI outside neutral range';
+                                break;
+                            case 'rsi_oversold':
+                                isPassed = value; // TRUE untuk kondisi 2
+                                reason = value ? 'RSI oversold - good LONG entry' : 'RSI not oversold';
+                                break;
+                            case 'rsi_overbought':
+                                isPassed = !value; // Harus FALSE untuk LONG
+                                reason = !value ? 'RSI not overbought (good for LONG)' : 'RSI overbought (bad for LONG)';
+                                break;
+                            case 'volume_confirmation':
+                                isPassed = value; // Harus TRUE
+                                reason = value ? 'Volume above average' : 'Volume below average';
+                                break;
+                            case 'volatility_confirmation':
+                                isPassed = value; // Harus TRUE untuk kondisi 1
+                                reason = value ? 'Sufficient volatility for scalping' : 'Low volatility';
+                                break;
+                            case 'trend_alignment':
+                                isPassed = value; // Sudah dihitung: LONG AND ema_bullish
+                                reason = value ? 'Trend aligned with LONG direction' : 'Trend not aligned';
+                                break;
+                            case 'momentum_confirmation':
+                                isPassed = value; // Sudah dihitung: LONG AND macd_bullish
+                                reason = value ? 'Momentum aligned with LONG direction' : 'Momentum not aligned';
+                                break;
+                            default:
+                                isPassed = value;
+                                reason = value ? 'Condition met' : 'Condition not met';
+                        }
+                        
+                    } else if (direction === 'SHORT') {
+                        // SHORT Strategy Requirements (dari analyze_symbol):
+                        // Kondisi 1: ema_bearish AND macd_bearish AND rsi_neutral AND volume_ok AND volatility_ok
+                        // Kondisi 2: ema_bearish AND rsi_overbought AND volume_ok
+                        
+                        switch(key) {
+                            case 'ema_fast_above_slow':
+                                isPassed = !value; // Harus FALSE untuk SHORT (ema_bearish)
+                                reason = !value ? 'Bearish trend required for SHORT' : 'Need bearish trend for SHORT signal';
+                                break;
+                            case 'macd_bullish':
+                                isPassed = !value; // Harus FALSE untuk SHORT kondisi 1
+                                reason = !value ? 'Bearish momentum supports SHORT' : 'Bullish momentum (OK if RSI overbought)';
+                                break;
+                            case 'rsi_neutral':
+                                isPassed = value; // TRUE untuk kondisi 1
+                                reason = value ? 'RSI in neutral range (35-65)' : 'RSI outside neutral range';
+                                break;
+                            case 'rsi_overbought':
+                                isPassed = value; // TRUE untuk kondisi 2
+                                reason = value ? 'RSI overbought - good SHORT entry' : 'RSI not overbought';
+                                break;
+                            case 'rsi_oversold':
+                                isPassed = !value; // Harus FALSE untuk SHORT
+                                reason = !value ? 'RSI not oversold (good for SHORT)' : 'RSI oversold (bad for SHORT)';
+                                break;
+                            case 'volume_confirmation':
+                                isPassed = value; // Harus TRUE
+                                reason = value ? 'Volume above average' : 'Volume below average';
+                                break;
+                            case 'volatility_confirmation':
+                                isPassed = value; // Harus TRUE untuk kondisi 1
+                                reason = value ? 'Sufficient volatility for scalping' : 'Low volatility';
+                                break;
+                            case 'trend_alignment':
+                                isPassed = value; // Sudah dihitung: SHORT AND ema_bearish
+                                reason = value ? 'Trend aligned with SHORT direction' : 'Trend not aligned';
+                                break;
+                            case 'momentum_confirmation':
+                                isPassed = value; // Sudah dihitung: SHORT AND macd_bearish
+                                reason = value ? 'Momentum aligned with SHORT direction' : 'Momentum not aligned';
+                                break;
+                            default:
+                                isPassed = value;
+                                reason = value ? 'Condition met' : 'Condition not met';
+                        }
+                    }
+                    
+                    if (isPassed) {
+                        passed.push({ key, description, value, reason });
+                    } else {
+                        failed.push({ key, description, value, reason });
+                    }
+                } else {
+                    values.push({ key, description, value });
+                }
+            });
+            
+            // Populate passed indicators
+            if (passed.length > 0) {
+                passed.forEach(indicator => {
+                    const div = document.createElement('div');
+                    div.className = 'flex flex-col space-y-1 p-3 bg-green-500/10 rounded border border-green-500/30';
+                    div.innerHTML = `
+                        <div class="flex items-center space-x-2">
+                            <i class="fas fa-check text-green-500"></i>
+                            <span class="text-sm font-medium">${indicator.description}</span>
+                        </div>
+                        <div class="text-xs text-gray-400 ml-6">
+                            Value: ${indicator.value} - ${indicator.reason || 'Condition met'}
+                        </div>
+                    `;
+                    passedContainer.appendChild(div);
+                });
+            } else {
+                passedContainer.innerHTML = '<p class="text-gray-500 text-sm">No indicators passed</p>';
+            }
+            
+            // Populate failed indicators
+            if (failed.length > 0) {
+                failed.forEach(indicator => {
+                    const div = document.createElement('div');
+                    div.className = 'flex flex-col space-y-1 p-3 bg-red-500/10 rounded border border-red-500/30';
+                    div.innerHTML = `
+                        <div class="flex items-center space-x-2">
+                            <i class="fas fa-times text-red-500"></i>
+                            <span class="text-sm font-medium">${indicator.description}</span>
+                        </div>
+                        <div class="text-xs text-gray-400 ml-6">
+                            Value: ${indicator.value} - ${indicator.reason || 'Condition not met'}
+                        </div>
+                    `;
+                    failedContainer.appendChild(div);
+                });
+            } else {
+                failedContainer.innerHTML = '<p class="text-gray-500 text-sm">No indicators failed</p>';
+            }
+            
+            // Populate values
+            values.forEach(indicator => {
+                const div = document.createElement('div');
+                div.className = 'p-3 bg-blue-500/10 rounded border border-blue-500/30';
+                div.innerHTML = `
+                    <div class="text-sm font-semibold text-blue-400">${indicator.description}</div>
+                    <div class="text-lg font-bold text-white">${typeof indicator.value === 'number' ? indicator.value.toFixed(6) : indicator.value}</div>
+                `;
+                valuesContainer.appendChild(div);
+            });
+            
+            // Generate signal summary
+            const totalIndicators = passed.length + failed.length;
+            const passRate = totalIndicators > 0 ? (passed.length / totalIndicators * 100).toFixed(1) : 0;
+            
+            let signalStrength = 'WEAK';
+            let strengthColor = 'text-red-500';
+            
+            if (passRate >= 80) {
+                signalStrength = 'VERY STRONG';
+                strengthColor = 'text-green-500';
+            } else if (passRate >= 60) {
+                signalStrength = 'STRONG';
+                strengthColor = 'text-green-400';
+            } else if (passRate >= 40) {
+                signalStrength = 'MODERATE';
+                strengthColor = 'text-yellow-500';
+            }
+            
+            summaryContainer.innerHTML = `
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <div class="text-sm text-gray-400">Signal Strength</div>
+                        <div class="text-lg font-bold ${strengthColor}">${signalStrength}</div>
+                    </div>
+                    <div>
+                        <div class="text-sm text-gray-400">Pass Rate</div>
+                        <div class="text-lg font-bold text-white">${passRate}%</div>
+                    </div>
+                    <div>
+                        <div class="text-sm text-gray-400">Passed</div>
+                        <div class="text-lg font-bold text-green-500">${passed.length}</div>
+                    </div>
+                    <div>
+                        <div class="text-sm text-gray-400">Failed</div>
+                        <div class="text-lg font-bold text-red-500">${failed.length}</div>
+                    </div>
+                </div>
+                <div class="mt-4 p-3 bg-gray-800 rounded">
+                    <div class="text-sm text-gray-400 mb-1">Analisis</div>
+                    <div class="text-sm">
+                        Sinyal ${direction} untuk ${symbol} memiliki tingkat keberhasilan indikator ${passRate}%, 
+                        menunjukkan sinyal yang ${signalStrength.toLowerCase() === 'strong' ? 'kuat' : signalStrength.toLowerCase() === 'moderate' ? 'sedang' : 'lemah'}. 
+                        ${passed.length} indikator teknikal mengkonfirmasi setup trading sementara ${failed.length} tidak memenuhi kriteria.
+                    </div>
+                </div>
+            `;
+            
+            // Add AI Reasoning sections if available
+            if (aiEntryReasoning || aiExitReasoning) {
+                summaryContainer.innerHTML += `
+                    <div class="mt-6">
+                        <h5 class="text-teal-500 font-semibold mb-3 flex items-center">
+                            <i class="fas fa-robot mr-2"></i>AI Analysis & Reasoning
+                        </h5>
+                `;
+                
+                if (aiEntryReasoning) {
+                    summaryContainer.innerHTML += `
+                        <div class="mb-4 p-4 bg-teal-500/10 rounded border border-teal-500/30">
+                            <h6 class="text-teal-400 font-semibold mb-2 flex items-center">
+                                <i class="fas fa-sign-in-alt mr-2"></i>Entry Reasoning
+                            </h6>
+                            <div class="text-sm text-gray-300 leading-relaxed">
+                                ${aiEntryReasoning.replace(/\n/g, '<br>')}
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                if (aiExitReasoning) {
+                    summaryContainer.innerHTML += `
+                        <div class="p-4 bg-orange-500/10 rounded border border-orange-500/30">
+                            <h6 class="text-orange-400 font-semibold mb-2 flex items-center">
+                                <i class="fas fa-sign-out-alt mr-2"></i>Exit Reasoning
+                            </h6>
+                            <div class="text-sm text-gray-300 leading-relaxed">
+                                ${aiExitReasoning.replace(/\n/g, '<br>')}
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                summaryContainer.innerHTML += `</div>`;
+            }
+            
+            // Show modal
+            document.getElementById('indicatorModal').classList.remove('hidden');
+        }
+        
+        function closeIndicatorModal() {
+            document.getElementById('indicatorModal').classList.add('hidden');
+        }
+        
+        // Close modal when clicking outside
+        document.getElementById('indicatorModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeIndicatorModal();
+            }
+        });
+    </script>
+
+    <!-- CoinGecko Price Marquee Widget -->
+    <div class="fixed bottom-0 left-0 right-0 z-50 bg-gray-900 bg-opacity-95 backdrop-blur-sm border-t border-gray-700">
+        <gecko-coin-price-marquee-widget 
+            locale="en" 
+            dark-mode="true" 
+            transparent-background="true" 
+            outlined="true" 
+            coin-ids="bitcoin,ethereum,solana,ripple,dogecoin,litecoin,tron,chainlink,cardano,sui,hyperliquid" 
+            initial-currency="usd">
+        </gecko-coin-price-marquee-widget>
+    </div>
+
+</body>
+</html>

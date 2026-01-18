@@ -20,12 +20,15 @@ BYBIT_API_SECRET = os.getenv('BYBIT_API_SECRET', '')
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID', '')
 
-# Trading Parameters
-SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT']  # Tambahkan symbol yang diinginkan
+# Trading Parameters (dari environment variables)
+BALANCE = float(os.getenv('BALANCE_USD', '1000'))  # Default $1000
+MAX_RISK = float(os.getenv('MAX_RISK_PERCENT', '2.0'))  # Default 2% untuk 4H
+MAX_LEVERAGE = int(os.getenv('MAX_LEVERAGE', '20'))  # Default 20x untuk 4H
+MAX_OPEN_POSITIONS = int(os.getenv('MAX_OPEN_POSITIONS', '3'))  # Default 3 untuk 4H
+
+# Symbol Configuration
+SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT']  # Fixed symbols untuk mode normal
 TIMEFRAME = '240'  # 4H = 240 menit
-BALANCE = 1000  # USD
-MAX_RISK = 2.0  # %
-MAX_LEVERAGE = 20
 
 # Indicator Parameters
 EMA_FAST = 21
@@ -190,29 +193,48 @@ def analyze_symbol(symbol):
     if bullish and support:
         entry_low = support
         entry_high = support + atr * 0.5
-        tp = close + atr * TP_ATR_MULT
-        sl = close - atr * SL_ATR_MULT
+        entry_price = (entry_low + entry_high) / 2  # Mid-point entry
+        tp = entry_price + atr * TP_ATR_MULT
+        sl = entry_price - atr * SL_ATR_MULT
         direction = "LONG"
     elif bearish and resistance:
         entry_low = resistance - atr * 0.5
         entry_high = resistance
-        tp = close - atr * TP_ATR_MULT
-        sl = close + atr * SL_ATR_MULT
+        entry_price = (entry_low + entry_high) / 2  # Mid-point entry
+        tp = entry_price - atr * TP_ATR_MULT  # TP di BAWAH entry untuk SHORT
+        sl = entry_price + atr * SL_ATR_MULT  # SL di ATAS entry untuk SHORT
         direction = "SHORT"
     else:
         return None
     
     # Check if price in entry zone
+    current_close = df.iloc[-1]['close']
     current_low = df.iloc[-1]['low']
     current_high = df.iloc[-1]['high']
-    in_zone = current_low <= entry_high and current_high >= entry_low
+    
+    # Untuk SHORT: entry zone adalah di sekitar resistance
+    # Lebih fleksibel: izinkan entry jika harga mendekati resistance dari bawah
+    if direction == "SHORT":
+        # Harga boleh sedikit di bawah entry zone (masih dalam range pullback)
+        tolerance = atr * 0.2  # Toleransi 20% dari ATR (lebih konservatif)
+        price_in_range = (entry_low - tolerance) <= current_close <= entry_high
+        # Jangan izinkan entry jika sudah breakout di atas resistance
+        not_breakout = current_close <= entry_high * 1.005  # Max 0.5% di atas resistance
+        in_zone = price_in_range and not_breakout
+    else:  # LONG
+        # Untuk LONG: harga harus di sekitar support
+        tolerance = atr * 0.2
+        price_in_range = entry_low <= current_close <= (entry_high + tolerance)
+        # Jangan izinkan entry jika sudah breakdown di bawah support
+        not_breakdown = current_close >= entry_low * 0.995  # Max 0.5% di bawah support
+        in_zone = price_in_range and not_breakdown
     
     if not in_zone:
         return None
     
     # Risk Management
-    sl_distance = abs(close - sl)
-    raw_lev = (MAX_RISK / 100) * close / sl_distance
+    sl_distance = abs(entry_price - sl)
+    raw_lev = (MAX_RISK / 100) * entry_price / sl_distance
     suggest_lev = min(MAX_LEVERAGE, max(1, round(raw_lev)))
     
     if suggest_lev <= 3:
@@ -222,22 +244,31 @@ def analyze_symbol(symbol):
     else:
         lev_mode = "AGGRESSIVE"
     
-    risk_amount = BALANCE * MAX_RISK / 100
-    sl_percent = sl_distance / close * 100
+    # Risk management untuk leveraged trading
+    max_margin_per_trade = BALANCE * MAX_RISK / 100  # $20 untuk 2% risk
+    
+    # Position size berdasarkan margin yang tersedia dan leverage
+    max_position_value = max_margin_per_trade * suggest_lev
+    pos_size = max_position_value / entry_price  # Quantity dalam coins
+    position_value_usd = pos_size * entry_price  # Nilai posisi dalam USD
+    
+    # Verifikasi margin yang digunakan
+    actual_margin = position_value_usd / suggest_lev
+    sl_percent = sl_distance / entry_price * 100
     rr_ratio = TP_ATR_MULT / SL_ATR_MULT
-    pos_size = risk_amount / sl_distance * suggest_lev
     
     return {
         'symbol': symbol,
         'direction': direction,
         'close': close,
+        'entry_price': entry_price,
         'entry_low': entry_low,
         'entry_high': entry_high,
         'sl': sl,
         'tp': tp,
         'leverage': suggest_lev,
         'lev_mode': lev_mode,
-        'risk_amount': risk_amount,
+        'risk_amount': max_margin_per_trade,  # Margin yang digunakan
         'sl_percent': sl_percent,
         'rr_ratio': rr_ratio,
         'pos_size': pos_size

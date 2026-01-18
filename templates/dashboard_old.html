@@ -1,0 +1,1047 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crypto Trading Dashboard</title>
+    <script src="https://cdn.socket.io/4.5.0/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary-bg: #0f0f23;
+            --secondary-bg: #1a1a2e;
+            --accent-bg: #16213e;
+            --yellow: #ffd700;
+            --green: #00ff88;
+            --red: #ff4757;
+            --blue: #3742fa;
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0a0;
+            --sidebar-width: 250px;
+        }
+        
+        body {
+            background: linear-gradient(135deg, var(--primary-bg) 0%, var(--secondary-bg) 100%);
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+        }
+        
+        .sidebar {
+            width: var(--sidebar-width);
+            background: linear-gradient(180deg, var(--secondary-bg) 0%, var(--accent-bg) 100%);
+            border-right: 2px solid rgba(255, 215, 0, 0.3);
+            box-shadow: 4px 0 20px rgba(0, 0, 0, 0.3);
+        }
+        
+        .sidebar-item {
+            transition: all 0.3s ease;
+            border-left: 4px solid transparent;
+        }
+        
+        .sidebar-item:hover {
+            background: rgba(255, 215, 0, 0.1);
+            border-left-color: var(--yellow);
+        }
+        
+        .sidebar-item.active {
+            background: rgba(255, 215, 0, 0.2);
+            border-left-color: var(--yellow);
+        }
+        
+        .main-content {
+            margin-left: var(--sidebar-width);
+        }
+        
+        .card {
+            background: rgba(26, 26, 46, 0.8);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 215, 0, 0.2);
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+        
+        .metric-card {
+            background: linear-gradient(135deg, var(--accent-bg) 0%, var(--secondary-bg) 100%);
+            border: 1px solid rgba(255, 215, 0, 0.3);
+            transition: all 0.3s ease;
+        }
+        
+        .metric-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 40px rgba(255, 215, 0, 0.2);
+        }
+        
+        .profit { color: var(--green); }
+        .loss { color: var(--red); }
+        .neutral { color: var(--yellow); }
+        
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        
+        .glow {
+            box-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+        }
+        
+        .table-row:hover {
+            background: rgba(255, 215, 0, 0.1);
+        }
+        
+        .status-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        .status-long {
+            background: rgba(0, 255, 136, 0.2);
+            color: var(--green);
+            border: 1px solid var(--green);
+        }
+        
+        .status-short {
+            background: rgba(255, 71, 87, 0.2);
+            color: var(--red);
+            border: 1px solid var(--red);
+        }
+        
+        .chart-container {
+            position: relative;
+            height: 300px;
+        }
+        
+        .mode-badge {
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .mode-dry-run {
+            background: rgba(255, 215, 0, 0.2);
+            color: var(--yellow);
+            border: 1px solid var(--yellow);
+        }
+        
+        .mode-real-trade {
+            background: rgba(255, 71, 87, 0.2);
+            color: var(--red);
+            border: 1px solid var(--red);
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+    <!-- Sidebar -->
+    <div class="sidebar fixed left-0 top-0 h-full z-40">
+        <div class="p-6">
+            <div class="flex items-center space-x-3 mb-8">
+                <i class="fas fa-chart-line text-yellow-500 text-2xl"></i>
+                <h1 class="text-xl font-bold text-yellow-500">Trading Bot</h1>
+            </div>
+            
+            <nav class="space-y-2">
+                <div class="sidebar-item active p-4 rounded-lg cursor-pointer" onclick="switchMode('dry-run')" id="nav-dry-run">
+                    <div class="flex items-center space-x-3">
+                        <i class="fas fa-flask text-yellow-500"></i>
+                        <div>
+                            <div class="font-semibold">Dry Run</div>
+                            <div class="text-xs text-gray-400">Simulation Mode</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="sidebar-item p-4 rounded-lg cursor-pointer" onclick="switchMode('real-trade')" id="nav-real-trade">
+                    <div class="flex items-center space-x-3">
+                        <i class="fas fa-dollar-sign text-red-500"></i>
+                        <div>
+                            <div class="font-semibold">Real Trade</div>
+                            <div class="text-xs text-gray-400">Live Trading</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <hr class="border-gray-700 my-4">
+                
+                <div class="sidebar-item p-4 rounded-lg cursor-pointer" onclick="showSettings()">
+                    <div class="flex items-center space-x-3">
+                        <i class="fas fa-cog text-blue-500"></i>
+                        <div>
+                            <div class="font-semibold">Settings</div>
+                            <div class="text-xs text-gray-400">Bot Configuration</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="sidebar-item p-4 rounded-lg cursor-pointer" onclick="showLogs()">
+                    <div class="flex items-center space-x-3">
+                        <i class="fas fa-terminal text-green-500"></i>
+                        <div>
+                            <div class="font-semibold">Logs</div>
+                            <div class="text-xs text-gray-400">Bot Activity</div>
+                        </div>
+                    </div>
+                </div>
+            </nav>
+        </div>
+        
+        <!-- Bot Status -->
+        <div class="absolute bottom-0 left-0 right-0 p-6 border-t border-gray-700">
+            <div class="text-sm">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-gray-400">Bot Status</span>
+                    <div class="flex items-center space-x-2">
+                        <div class="w-2 h-2 bg-green-500 rounded-full pulse"></div>
+                        <span class="text-green-500 text-xs">ACTIVE</span>
+                    </div>
+                </div>
+                <div class="text-xs text-gray-500" id="bot-info">
+                    Scanning 557 USDT pairs
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+        <!-- Header -->
+        <header class="bg-gray-900 border-b border-yellow-500/30 p-4">
+            <div class="flex justify-between items-center">
+                <div class="flex items-center space-x-4">
+                    <h2 class="text-2xl font-bold text-white" id="dashboard-title">Dry Run Dashboard</h2>
+                    <span class="mode-badge mode-dry-run" id="mode-badge">Simulation Mode</span>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <div class="flex items-center space-x-2">
+                        <div class="w-3 h-3 bg-green-500 rounded-full pulse"></div>
+                        <span class="text-sm text-gray-300">Live</span>
+                    </div>
+                    <span class="text-sm text-gray-400" id="current-time"></span>
+                </div>
+            </div>
+        </header>
+
+        <div class="container mx-auto p-6 space-y-6" id="dashboard-content">
+        <!-- Performance Metrics -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div class="metric-card card p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-400 text-sm">Total Balance</p>
+                        <p class="text-2xl font-bold text-yellow-500" id="total-balance">$1,000.00</p>
+                    </div>
+                    <i class="fas fa-wallet text-yellow-500 text-2xl"></i>
+                </div>
+                <div class="mt-2">
+                    <span class="text-sm" id="balance-change">+$0.00 (0.00%)</span>
+                </div>
+            </div>
+
+            <div class="metric-card card p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-400 text-sm">Total PnL</p>
+                        <p class="text-2xl font-bold" id="total-pnl">$0.00</p>
+                    </div>
+                    <i class="fas fa-chart-line text-green-500 text-2xl"></i>
+                </div>
+                <div class="mt-2">
+                    <span class="text-sm text-gray-400">Unrealized: <span id="unrealized-pnl">$0.00</span></span>
+                </div>
+            </div>
+
+            <div class="metric-card card p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-400 text-sm">Win Rate</p>
+                        <p class="text-2xl font-bold text-blue-500" id="win-rate">0%</p>
+                    </div>
+                    <i class="fas fa-target text-blue-500 text-2xl"></i>
+                </div>
+                <div class="mt-2">
+                    <span class="text-sm text-gray-400"><span id="winning-trades">0</span>W / <span id="losing-trades">0</span>L</span>
+                </div>
+            </div>
+
+            <div class="metric-card card p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-400 text-sm">Max Drawdown</p>
+                        <p class="text-2xl font-bold text-red-500" id="max-drawdown">0%</p>
+                    </div>
+                    <i class="fas fa-arrow-down text-red-500 text-2xl"></i>
+                </div>
+                <div class="mt-2">
+                    <span class="text-sm text-gray-400">Profit Factor: <span id="profit-factor">0.00</span></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Row -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Balance Chart -->
+            <div class="card p-6">
+                <h3 class="text-xl font-semibold mb-4 text-yellow-500">
+                    <i class="fas fa-chart-area mr-2"></i>Balance Performance
+                </h3>
+                <div class="chart-container">
+                    <canvas id="balanceChart"></canvas>
+                </div>
+            </div>
+
+            <!-- PnL Distribution -->
+            <div class="card p-6">
+                <h3 class="text-xl font-semibold mb-4 text-yellow-500">
+                    <i class="fas fa-chart-pie mr-2"></i>PnL Distribution
+                </h3>
+                <div class="chart-container">
+                    <canvas id="pnlChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Open Positions -->
+        <div class="card p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-semibold text-yellow-500">
+                    <i class="fas fa-coins mr-2"></i>Open Positions
+                </h3>
+                <span class="bg-blue-500 text-white px-3 py-1 rounded-full text-sm" id="open-positions-count">0</span>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead>
+                        <tr class="border-b border-gray-700">
+                            <th class="text-left py-3 px-4 text-gray-400">Symbol</th>
+                            <th class="text-left py-3 px-4 text-gray-400">Direction</th>
+                            <th class="text-left py-3 px-4 text-gray-400">Entry Price</th>
+                            <th class="text-left py-3 px-4 text-gray-400">Current Price</th>
+                            <th class="text-left py-3 px-4 text-gray-400">Size</th>
+                            <th class="text-left py-3 px-4 text-gray-400">Leverage</th>
+                            <th class="text-left py-3 px-4 text-gray-400">TP/SL</th>
+                            <th class="text-left py-3 px-4 text-gray-400">Unrealized PnL</th>
+                            <th class="text-left py-3 px-4 text-gray-400">Duration</th>
+                        </tr>
+                    </thead>
+                    <tbody id="open-positions-table">
+                        <tr>
+                            <td colspan="9" class="text-center py-8 text-gray-500">No open positions</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Trade History -->
+        <div class="card p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-semibold text-yellow-500">
+                    <i class="fas fa-history mr-2"></i>Trade History
+                </h3>
+                <div class="flex space-x-2">
+                    <button class="bg-yellow-500 text-black px-4 py-2 rounded-lg text-sm font-semibold hover:bg-yellow-400 transition-colors" onclick="loadHistory(50)">
+                        Last 50
+                    </button>
+                    <button class="bg-gray-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-gray-500 transition-colors" onclick="loadHistory(100)">
+                        Last 100
+                    </button>
+                </div>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead>
+                        <tr class="border-b border-gray-700">
+                            <th class="text-left py-3 px-4 text-gray-400">Symbol</th>
+                            <th class="text-left py-3 px-4 text-gray-400">Direction</th>
+                            <th class="text-left py-3 px-4 text-gray-400">Entry/Exit</th>
+                            <th class="text-left py-3 px-4 text-gray-400">Size</th>
+                            <th class="text-left py-3 px-4 text-gray-400">Leverage</th>
+                            <th class="text-left py-3 px-4 text-gray-400">PnL</th>
+                            <th class="text-left py-3 px-4 text-gray-400">Exit Reason</th>
+                            <th class="text-left py-3 px-4 text-gray-400">Duration</th>
+                            <th class="text-left py-3 px-4 text-gray-400">Indicators</th>
+                        </tr>
+                    </thead>
+                    <tbody id="trade-history-table">
+                        <tr>
+                            <td colspan="9" class="text-center py-8 text-gray-500">No trade history</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Indicator Details Modal -->
+    <div id="indicatorModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
+        <div class="bg-gray-900 rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-semibold text-yellow-500">
+                    <i class="fas fa-chart-bar mr-2"></i>Technical Indicators Analysis
+                </h3>
+                <button onclick="closeIndicatorModal()" class="text-gray-400 hover:text-white">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            
+            <div class="mb-4">
+                <h4 class="text-lg font-semibold text-white mb-2" id="modalTradeInfo"></h4>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Passed Indicators -->
+                <div class="card p-4">
+                    <h5 class="text-green-500 font-semibold mb-3 flex items-center">
+                        <i class="fas fa-check-circle mr-2"></i>Passed Indicators
+                    </h5>
+                    <div id="passedIndicators" class="space-y-2">
+                        <!-- Will be populated by JavaScript -->
+                    </div>
+                </div>
+                
+                <!-- Failed Indicators -->
+                <div class="card p-4">
+                    <h5 class="text-red-500 font-semibold mb-3 flex items-center">
+                        <i class="fas fa-times-circle mr-2"></i>Failed Indicators
+                    </h5>
+                    <div id="failedIndicators" class="space-y-2">
+                        <!-- Will be populated by JavaScript -->
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Numerical Values -->
+            <div class="card p-4 mt-6">
+                <h5 class="text-blue-500 font-semibold mb-3 flex items-center">
+                    <i class="fas fa-calculator mr-2"></i>Indicator Values
+                </h5>
+                <div id="indicatorValues" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- Will be populated by JavaScript -->
+                </div>
+            </div>
+            
+            <!-- Signal Summary -->
+            <div class="card p-4 mt-6">
+                <h5 class="text-yellow-500 font-semibold mb-3 flex items-center">
+                    <i class="fas fa-lightbulb mr-2"></i>Signal Summary
+                </h5>
+                <div id="signalSummary" class="text-gray-300">
+                    <!-- Will be populated by JavaScript -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Socket.IO connection
+        const socket = io();
+        
+        // Charts
+        let balanceChart, pnlChart;
+        
+        // Current mode
+        let currentMode = 'dry-run';
+        
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeCharts();
+            loadInitialData();
+            updateTime();
+            setInterval(updateTime, 1000);
+            loadDashboardContent();
+        });
+        
+        // Mode switching
+        function switchMode(mode) {
+            currentMode = mode;
+            
+            // Update navigation
+            document.querySelectorAll('.sidebar-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            document.getElementById(`nav-${mode}`).classList.add('active');
+            
+            // Update header
+            if (mode === 'dry-run') {
+                document.getElementById('dashboard-title').textContent = 'Dry Run Dashboard';
+                document.getElementById('mode-badge').textContent = 'Simulation Mode';
+                document.getElementById('mode-badge').className = 'mode-badge mode-dry-run';
+            } else {
+                document.getElementById('dashboard-title').textContent = 'Real Trade Dashboard';
+                document.getElementById('mode-badge').textContent = 'Live Trading';
+                document.getElementById('mode-badge').className = 'mode-badge mode-real-trade';
+            }
+            
+            // Reload data for selected mode
+            loadInitialData();
+        }
+        
+        function showSettings() {
+            alert('Settings panel coming soon!');
+        }
+        
+        function showLogs() {
+            alert('Logs panel coming soon!');
+        }
+        
+        function loadDashboardContent() {
+            const content = document.getElementById('dashboard-content');
+            content.innerHTML = `
+                <!-- Performance Metrics -->
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <div class="metric-card card p-6">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-gray-400 text-sm">Total Balance</p>
+                                <p class="text-2xl font-bold text-yellow-500" id="total-balance">$1,000.00</p>
+                            </div>
+                            <i class="fas fa-wallet text-yellow-500 text-2xl"></i>
+                        </div>
+                        <div class="mt-2">
+                            <span class="text-sm" id="balance-change">+$0.00 (0.00%)</span>
+                        </div>
+                    </div>
+
+                    <div class="metric-card card p-6">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-gray-400 text-sm">Total PnL</p>
+                                <p class="text-2xl font-bold" id="total-pnl">$0.00</p>
+                            </div>
+                            <i class="fas fa-chart-line text-green-500 text-2xl"></i>
+                        </div>
+                        <div class="mt-2">
+                            <span class="text-sm text-gray-400">Unrealized: <span id="unrealized-pnl">$0.00</span></span>
+                        </div>
+                    </div>
+
+                    <div class="metric-card card p-6">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-gray-400 text-sm">Win Rate</p>
+                                <p class="text-2xl font-bold text-blue-500" id="win-rate">0%</p>
+                            </div>
+                            <i class="fas fa-target text-blue-500 text-2xl"></i>
+                        </div>
+                        <div class="mt-2">
+                            <span class="text-sm text-gray-400"><span id="winning-trades">0</span>W / <span id="losing-trades">0</span>L</span>
+                        </div>
+                    </div>
+
+                    <div class="metric-card card p-6">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-gray-400 text-sm">Max Drawdown</p>
+                                <p class="text-2xl font-bold text-red-500" id="max-drawdown">0%</p>
+                            </div>
+                            <i class="fas fa-arrow-down text-red-500 text-2xl"></i>
+                        </div>
+                        <div class="mt-2">
+                            <span class="text-sm text-gray-400">Profit Factor: <span id="profit-factor">0.00</span></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Charts Row -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <!-- Balance Chart -->
+                    <div class="card p-6">
+                        <h3 class="text-xl font-semibold mb-4 text-yellow-500">
+                            <i class="fas fa-chart-area mr-2"></i>Balance Performance
+                        </h3>
+                        <div class="chart-container">
+                            <canvas id="balanceChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- PnL Distribution -->
+                    <div class="card p-6">
+                        <h3 class="text-xl font-semibold mb-4 text-yellow-500">
+                            <i class="fas fa-chart-pie mr-2"></i>PnL Distribution
+                        </h3>
+                        <div class="chart-container">
+                            <canvas id="pnlChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Open Positions -->
+                <div class="card p-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-xl font-semibold text-yellow-500">
+                            <i class="fas fa-coins mr-2"></i>Open Positions
+                        </h3>
+                        <span class="bg-blue-500 text-white px-3 py-1 rounded-full text-sm" id="open-positions-count">0</span>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full">
+                            <thead>
+                                <tr class="border-b border-gray-700">
+                                    <th class="text-left py-3 px-4 text-gray-400">Symbol</th>
+                                    <th class="text-left py-3 px-4 text-gray-400">Direction</th>
+                                    <th class="text-left py-3 px-4 text-gray-400">Entry Price</th>
+                                    <th class="text-left py-3 px-4 text-gray-400">Current Price</th>
+                                    <th class="text-left py-3 px-4 text-gray-400">Size</th>
+                                    <th class="text-left py-3 px-4 text-gray-400">Leverage</th>
+                                    <th class="text-left py-3 px-4 text-gray-400">TP/SL</th>
+                                    <th class="text-left py-3 px-4 text-gray-400">Unrealized PnL</th>
+                                    <th class="text-left py-3 px-4 text-gray-400">Duration</th>
+                                </tr>
+                            </thead>
+                            <tbody id="open-positions-table">
+                                <tr>
+                                    <td colspan="9" class="text-center py-8 text-gray-500">No open positions</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Trade History -->
+                <div class="card p-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-xl font-semibold text-yellow-500">
+                            <i class="fas fa-history mr-2"></i>Trade History
+                        </h3>
+                        <div class="flex space-x-2">
+                            <button class="bg-yellow-500 text-black px-4 py-2 rounded-lg text-sm font-semibold hover:bg-yellow-400 transition-colors" onclick="loadHistory(50)">
+                                Last 50
+                            </button>
+                            <button class="bg-gray-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-gray-500 transition-colors" onclick="loadHistory(100)">
+                                Last 100
+                            </button>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full">
+                            <thead>
+                                <tr class="border-b border-gray-700">
+                                    <th class="text-left py-3 px-4 text-gray-400">Symbol</th>
+                                    <th class="text-left py-3 px-4 text-gray-400">Direction</th>
+                                    <th class="text-left py-3 px-4 text-gray-400">Entry/Exit</th>
+                                    <th class="text-left py-3 px-4 text-gray-400">Size</th>
+                                    <th class="text-left py-3 px-4 text-gray-400">Leverage</th>
+                                    <th class="text-left py-3 px-4 text-gray-400">PnL</th>
+                                    <th class="text-left py-3 px-4 text-gray-400">Exit Reason</th>
+                                    <th class="text-left py-3 px-4 text-gray-400">Duration</th>
+                                    <th class="text-left py-3 px-4 text-gray-400">Indicators</th>
+                                </tr>
+                            </thead>
+                            <tbody id="trade-history-table">
+                                <tr>
+                                    <td colspan="9" class="text-center py-8 text-gray-500">No trade history</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+            
+            // Reinitialize charts after content is loaded
+            setTimeout(() => {
+                initializeCharts();
+            }, 100);
+        }
+        
+        // Socket event handlers
+        socket.on('positions_update', function(positions) {
+            updateOpenPositions(positions);
+        });
+        
+        socket.on('performance_update', function(metrics) {
+            updatePerformanceMetrics(metrics);
+        });
+        
+        socket.on('new_signal', function(signal) {
+            showNewSignalNotification(signal);
+        });
+        
+        function updateTime() {
+            const now = new Date();
+            document.getElementById('current-time').textContent = now.toLocaleTimeString();
+        }
+        
+        function initializeCharts() {
+            // Balance Chart
+            const balanceCtx = document.getElementById('balanceChart').getContext('2d');
+            balanceChart = new Chart(balanceCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Balance',
+                        data: [],
+                        borderColor: '#ffd700',
+                        backgroundColor: 'rgba(255, 215, 0, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: { color: '#ffffff' }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: { color: '#a0a0a0' },
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' }
+                        },
+                        y: {
+                            ticks: { color: '#a0a0a0' },
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' }
+                        }
+                    }
+                }
+            });
+            
+            // PnL Chart
+            const pnlCtx = document.getElementById('pnlChart').getContext('2d');
+            pnlChart = new Chart(pnlCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Winning Trades', 'Losing Trades'],
+                    datasets: [{
+                        data: [0, 0],
+                        backgroundColor: ['#00ff88', '#ff4757'],
+                        borderColor: ['#00ff88', '#ff4757'],
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: { color: '#ffffff' }
+                        }
+                    }
+                }
+            });
+        }
+        
+        function loadInitialData() {
+            const mode = currentMode;
+            
+            // Load performance metrics
+            fetch(`/api/performance?mode=${mode}`)
+                .then(response => response.json())
+                .then(data => updatePerformanceMetrics(data));
+            
+            // Load positions
+            fetch(`/api/positions?mode=${mode}`)
+                .then(response => response.json())
+                .then(data => updateOpenPositions(data));
+            
+            // Load history
+            loadHistory(50);
+            
+            // Load chart data
+            loadChartData();
+        }
+        
+        function updatePerformanceMetrics(metrics) {
+            document.getElementById('total-balance').textContent = `$${metrics.balance.toFixed(2)}`;
+            document.getElementById('total-pnl').textContent = `$${metrics.total_pnl.toFixed(2)}`;
+            document.getElementById('total-pnl').className = `text-2xl font-bold ${metrics.total_pnl >= 0 ? 'profit' : 'loss'}`;
+            
+            const balanceChange = metrics.balance - metrics.starting_balance;
+            const balanceChangePercent = ((balanceChange / metrics.starting_balance) * 100);
+            document.getElementById('balance-change').textContent = `${balanceChange >= 0 ? '+' : ''}$${balanceChange.toFixed(2)} (${balanceChangePercent.toFixed(2)}%)`;
+            document.getElementById('balance-change').className = `text-sm ${balanceChange >= 0 ? 'profit' : 'loss'}`;
+            
+            document.getElementById('win-rate').textContent = `${metrics.win_rate.toFixed(1)}%`;
+            document.getElementById('winning-trades').textContent = metrics.winning_trades;
+            document.getElementById('losing-trades').textContent = metrics.losing_trades;
+            document.getElementById('max-drawdown').textContent = `${metrics.max_drawdown.toFixed(2)}%`;
+            document.getElementById('profit-factor').textContent = metrics.profit_factor.toFixed(2);
+            
+            // Update PnL chart
+            pnlChart.data.datasets[0].data = [metrics.winning_trades, metrics.losing_trades];
+            pnlChart.update();
+        }
+        
+        function updateOpenPositions(positions) {
+            const tbody = document.getElementById('open-positions-table');
+            document.getElementById('open-positions-count').textContent = positions.length;
+            
+            if (positions.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="9" class="text-center py-8 text-gray-500">No open positions</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = positions.map(pos => {
+                const duration = Math.floor((new Date() - new Date(pos.entry_time)) / (1000 * 60));
+                const pnlClass = pos.unrealized_pnl >= 0 ? 'profit' : 'loss';
+                
+                return `
+                    <tr class="table-row border-b border-gray-800">
+                        <td class="py-3 px-4 font-semibold">${pos.symbol}</td>
+                        <td class="py-3 px-4">
+                            <span class="status-badge status-${pos.direction.toLowerCase()}">${pos.direction}</span>
+                        </td>
+                        <td class="py-3 px-4">$${pos.entry_price.toFixed(4)}</td>
+                        <td class="py-3 px-4">$${pos.current_price.toFixed(4)}</td>
+                        <td class="py-3 px-4">${pos.quantity.toFixed(3)}</td>
+                        <td class="py-3 px-4">${pos.leverage}x</td>
+                        <td class="py-3 px-4 text-sm">
+                            <div class="profit">TP: $${pos.tp_price.toFixed(4)}</div>
+                            <div class="loss">SL: $${pos.sl_price.toFixed(4)}</div>
+                        </td>
+                        <td class="py-3 px-4 font-semibold ${pnlClass}">$${pos.unrealized_pnl.toFixed(2)}</td>
+                        <td class="py-3 px-4 text-sm text-gray-400">${duration}m</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+        
+        function loadHistory(limit) {
+            const mode = currentMode;
+            fetch(`/api/history?limit=${limit}&mode=${mode}`)
+                .then(response => response.json())
+                .then(data => updateTradeHistory(data));
+        }
+        
+        function updateTradeHistory(trades) {
+            const tbody = document.getElementById('trade-history-table');
+            
+            if (trades.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="9" class="text-center py-8 text-gray-500">No trade history</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = trades.map(trade => {
+                const pnlClass = trade.pnl >= 0 ? 'profit' : 'loss';
+                const indicators = Object.entries(trade.indicators).map(([key, value]) => 
+                    `${key}: ${typeof value === 'boolean' ? (value ? '✅' : '❌') : value}`
+                ).join(', ');
+                
+                return `
+                    <tr class="table-row border-b border-gray-800">
+                        <td class="py-3 px-4 font-semibold">${trade.symbol}</td>
+                        <td class="py-3 px-4">
+                            <span class="status-badge status-${trade.direction.toLowerCase()}">${trade.direction}</span>
+                        </td>
+                        <td class="py-3 px-4 text-sm">
+                            <div>Entry: $${trade.entry_price.toFixed(4)}</div>
+                            <div>Exit: $${trade.exit_price.toFixed(4)}</div>
+                        </td>
+                        <td class="py-3 px-4">${trade.quantity.toFixed(3)}</td>
+                        <td class="py-3 px-4">${trade.leverage}x</td>
+                        <td class="py-3 px-4 font-semibold ${pnlClass}">
+                            <div>$${trade.pnl.toFixed(2)}</div>
+                            <div class="text-xs">(${trade.pnl_percentage.toFixed(2)}%)</div>
+                        </td>
+                        <td class="py-3 px-4">
+                            <span class="px-2 py-1 rounded text-xs ${trade.exit_reason === 'TP_HIT' ? 'bg-green-500' : 'bg-red-500'} text-white">
+                                ${trade.exit_reason}
+                            </span>
+                        </td>
+                        <td class="py-3 px-4 text-sm text-gray-400">${trade.duration_minutes}m</td>
+                        <td class="py-3 px-4 text-xs">
+                            <button onclick="showIndicatorDetails('${trade.id}', '${trade.symbol}', '${trade.direction}', ${JSON.stringify(trade.indicators).replace(/"/g, '&quot;')})" 
+                                    class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-xs transition-colors">
+                                View Details
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+        
+        function loadChartData() {
+            const mode = currentMode;
+            fetch(`/api/chart-data?mode=${mode}`)
+                .then(response => response.json())
+                .then(data => {
+                    const labels = data.map(d => d.date);
+                    const balances = data.map(d => d.balance);
+                    
+                    balanceChart.data.labels = labels;
+                    balanceChart.data.datasets[0].data = balances;
+                    balanceChart.update();
+                });
+        }
+        
+        function showNewSignalNotification(signal) {
+            // Create notification
+            const notification = document.createElement('div');
+            notification.className = 'fixed top-4 right-4 bg-yellow-500 text-black p-4 rounded-lg shadow-lg z-50 glow';
+            notification.innerHTML = `
+                <div class="flex items-center space-x-2">
+                    <i class="fas fa-bell"></i>
+                    <span class="font-semibold">New Signal: ${signal.symbol} ${signal.direction}</span>
+                </div>
+            `;
+            
+            document.body.appendChild(notification);
+            
+            // Remove after 5 seconds
+            setTimeout(() => {
+                notification.remove();
+            }, 5000);
+        }
+        
+        function showIndicatorDetails(tradeId, symbol, direction, indicators) {
+            // Set trade info
+            document.getElementById('modalTradeInfo').textContent = `${symbol} ${direction} Trade Analysis`;
+            
+            // Parse indicators
+            const passedContainer = document.getElementById('passedIndicators');
+            const failedContainer = document.getElementById('failedIndicators');
+            const valuesContainer = document.getElementById('indicatorValues');
+            const summaryContainer = document.getElementById('signalSummary');
+            
+            // Clear containers
+            passedContainer.innerHTML = '';
+            failedContainer.innerHTML = '';
+            valuesContainer.innerHTML = '';
+            
+            // Define indicator descriptions
+            const indicatorDescriptions = {
+                'ema_fast_above_slow': 'EMA Fast > EMA Slow (Trend Direction)',
+                'macd_bullish': 'MACD Line > Signal Line (Momentum)',
+                'rsi_level': 'RSI Level (Overbought/Oversold)',
+                'atr_value': 'Average True Range (Volatility)',
+                'support_resistance': 'Support/Resistance Level',
+                'price_near_level': 'Price Near Key Level',
+                'volume_confirmation': 'Volume Confirmation',
+                'breakout_confirmation': 'Breakout Confirmation'
+            };
+            
+            // Separate passed and failed indicators
+            const passed = [];
+            const failed = [];
+            const values = [];
+            
+            Object.entries(indicators).forEach(([key, value]) => {
+                const description = indicatorDescriptions[key] || key.replace(/_/g, ' ').toUpperCase();
+                
+                if (typeof value === 'boolean') {
+                    if (value) {
+                        passed.push({ key, description, value });
+                    } else {
+                        failed.push({ key, description, value });
+                    }
+                } else {
+                    values.push({ key, description, value });
+                }
+            });
+            
+            // Populate passed indicators
+            if (passed.length > 0) {
+                passed.forEach(indicator => {
+                    const div = document.createElement('div');
+                    div.className = 'flex items-center space-x-2 p-2 bg-green-500/10 rounded border border-green-500/30';
+                    div.innerHTML = `
+                        <i class="fas fa-check text-green-500"></i>
+                        <span class="text-sm">${indicator.description}</span>
+                    `;
+                    passedContainer.appendChild(div);
+                });
+            } else {
+                passedContainer.innerHTML = '<p class="text-gray-500 text-sm">No indicators passed</p>';
+            }
+            
+            // Populate failed indicators
+            if (failed.length > 0) {
+                failed.forEach(indicator => {
+                    const div = document.createElement('div');
+                    div.className = 'flex items-center space-x-2 p-2 bg-red-500/10 rounded border border-red-500/30';
+                    div.innerHTML = `
+                        <i class="fas fa-times text-red-500"></i>
+                        <span class="text-sm">${indicator.description}</span>
+                    `;
+                    failedContainer.appendChild(div);
+                });
+            } else {
+                failedContainer.innerHTML = '<p class="text-gray-500 text-sm">No indicators failed</p>';
+            }
+            
+            // Populate values
+            values.forEach(indicator => {
+                const div = document.createElement('div');
+                div.className = 'p-3 bg-blue-500/10 rounded border border-blue-500/30';
+                div.innerHTML = `
+                    <div class="text-sm font-semibold text-blue-400">${indicator.description}</div>
+                    <div class="text-lg font-bold text-white">${typeof indicator.value === 'number' ? indicator.value.toFixed(6) : indicator.value}</div>
+                `;
+                valuesContainer.appendChild(div);
+            });
+            
+            // Generate signal summary
+            const totalIndicators = passed.length + failed.length;
+            const passRate = totalIndicators > 0 ? (passed.length / totalIndicators * 100).toFixed(1) : 0;
+            
+            let signalStrength = 'WEAK';
+            let strengthColor = 'text-red-500';
+            
+            if (passRate >= 80) {
+                signalStrength = 'VERY STRONG';
+                strengthColor = 'text-green-500';
+            } else if (passRate >= 60) {
+                signalStrength = 'STRONG';
+                strengthColor = 'text-green-400';
+            } else if (passRate >= 40) {
+                signalStrength = 'MODERATE';
+                strengthColor = 'text-yellow-500';
+            }
+            
+            summaryContainer.innerHTML = `
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <div class="text-sm text-gray-400">Signal Strength</div>
+                        <div class="text-lg font-bold ${strengthColor}">${signalStrength}</div>
+                    </div>
+                    <div>
+                        <div class="text-sm text-gray-400">Pass Rate</div>
+                        <div class="text-lg font-bold text-white">${passRate}%</div>
+                    </div>
+                    <div>
+                        <div class="text-sm text-gray-400">Passed</div>
+                        <div class="text-lg font-bold text-green-500">${passed.length}</div>
+                    </div>
+                    <div>
+                        <div class="text-sm text-gray-400">Failed</div>
+                        <div class="text-lg font-bold text-red-500">${failed.length}</div>
+                    </div>
+                </div>
+                <div class="mt-4 p-3 bg-gray-800 rounded">
+                    <div class="text-sm text-gray-400 mb-1">Analysis</div>
+                    <div class="text-sm">
+                        This ${direction} signal for ${symbol} had a ${passRate}% indicator pass rate, 
+                        indicating a ${signalStrength.toLowerCase()} signal. 
+                        ${passed.length} technical indicators confirmed the trade setup while ${failed.length} did not meet the criteria.
+                    </div>
+                </div>
+            `;
+            
+            // Show modal
+            document.getElementById('indicatorModal').classList.remove('hidden');
+        }
+        
+        function closeIndicatorModal() {
+            document.getElementById('indicatorModal').classList.add('hidden');
+        }
+        
+        // Close modal when clicking outside
+        document.getElementById('indicatorModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeIndicatorModal();
+            }
+        });
+    </script>
+</body>
+</html>

@@ -23,9 +23,11 @@ RSI_LENGTH = 14
 TP_ATR_MULT = 2.0
 SL_ATR_MULT = 1.2
 PIVOT_LENGTH = 5
-BALANCE = 1000
-MAX_RISK = 2.0
-MAX_LEVERAGE = 20
+
+# Trading Parameters (dari environment variables)
+BALANCE = float(os.getenv('BALANCE_USD', '1000'))  # Default $1000
+MAX_RISK = float(os.getenv('MAX_RISK_PERCENT', '1.0'))  # Default 1%
+MAX_LEVERAGE = int(os.getenv('MAX_LEVERAGE', '10'))  # Default 10x
 
 def get_klines(symbol, interval='240', limit=200):
     try:
@@ -196,13 +198,15 @@ def debug_symbol(symbol):
     if bullish and support:
         entry_low = support
         entry_high = support + last['atr'] * 0.5
-        tp = last['close'] + last['atr'] * TP_ATR_MULT
-        sl = last['close'] - last['atr'] * SL_ATR_MULT
+        entry_price = (entry_low + entry_high) / 2
+        tp = entry_price + last['atr'] * TP_ATR_MULT
+        sl = entry_price - last['atr'] * SL_ATR_MULT
         
         in_zone_price = last['low'] <= entry_high and last['high'] >= entry_low
         
         print(f"✅ LONG SETUP DETECTED 📈")
         print(f"Entry Zone:   ${entry_low:.4f} - ${entry_high:.4f}")
+        print(f"Entry Price:  ${entry_price:.4f} (mid)")
         print(f"Stop Loss:    ${sl:.4f}")
         print(f"Take Profit:  ${tp:.4f}")
         print(f"\nEntry Zone Check:")
@@ -213,14 +217,16 @@ def debug_symbol(symbol):
     elif bearish and resistance:
         entry_low = resistance - last['atr'] * 0.5
         entry_high = resistance
-        tp = last['close'] - last['atr'] * TP_ATR_MULT
-        sl = last['close'] + last['atr'] * SL_ATR_MULT
+        entry_price = (entry_low + entry_high) / 2
+        tp = entry_price - last['atr'] * TP_ATR_MULT
+        sl = entry_price + last['atr'] * SL_ATR_MULT  # SL DI ATAS entry untuk SHORT!
         
         in_zone_price = last['low'] <= entry_high and last['high'] >= entry_low
         
         print(f"✅ SHORT SETUP DETECTED 📉")
         print(f"Entry Zone:   ${entry_low:.4f} - ${entry_high:.4f}")
-        print(f"Stop Loss:    ${sl:.4f}")
+        print(f"Entry Price:  ${entry_price:.4f} (mid)")
+        print(f"Stop Loss:    ${sl:.4f} (DI ATAS entry)")
         print(f"Take Profit:  ${tp:.4f}")
         print(f"\nEntry Zone Check:")
         print(f"  Low <= Entry High:  ${last['low']:.4f} <= ${entry_high:.4f} = {last['low'] <= entry_high} {'✅' if last['low'] <= entry_high else '❌'}")
@@ -239,10 +245,18 @@ def debug_symbol(symbol):
         else:
             lev_mode = "AGGRESSIVE"
         
-        risk_amount = BALANCE * MAX_RISK / 100
+        # Risk management untuk leveraged trading
+        max_margin_per_trade = BALANCE * MAX_RISK / 100  # $10 untuk 1% risk
+        
+        # Position size berdasarkan margin yang tersedia dan leverage
+        max_position_value = max_margin_per_trade * suggest_lev
+        pos_size = max_position_value / last['close']  # Quantity dalam coins
+        position_value_usd = pos_size * last['close']  # Nilai posisi dalam USD
+        
+        # Verifikasi margin yang digunakan
+        actual_margin = position_value_usd / suggest_lev
         sl_percent = sl_distance / last['close'] * 100
         rr_ratio = TP_ATR_MULT / SL_ATR_MULT
-        pos_size = risk_amount / sl_distance * suggest_lev
         
         print(f"\n💰 RISK MANAGEMENT")
         print(f"Leverage:     {suggest_lev}x ({lev_mode})")
