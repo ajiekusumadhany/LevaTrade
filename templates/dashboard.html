@@ -98,6 +98,220 @@
         .hamburger-btn:hover {
             background: rgba(255, 215, 0, 0.1);
         }
+
+        /* Animated Mascot Styles */
+        .mascot-container {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .anime-mascot {
+            font-size: 2.5rem;
+            animation: mascotBounce 2s ease-in-out infinite, mascotGlow 3s ease-in-out infinite alternate;
+            filter: drop-shadow(0 0 10px rgba(255, 215, 0, 0.5));
+            transition: transform 0.3s ease;
+        }
+
+        .anime-mascot:hover {
+            transform: scale(1.2) rotate(10deg);
+            animation-duration: 0.5s;
+        }
+
+        @keyframes mascotBounce {
+            0%, 20%, 50%, 80%, 100% {
+                transform: translateY(0) rotate(0deg);
+            }
+            40% {
+                transform: translateY(-10px) rotate(5deg);
+            }
+            60% {
+                transform: translateY(-5px) rotate(-3deg);
+            }
+        }
+
+        @keyframes mascotGlow {
+            0% {
+                filter: drop-shadow(0 0 10px rgba(255, 215, 0, 0.5));
+            }
+            100% {
+                filter: drop-shadow(0 0 20px rgba(255, 215, 0, 0.8)) drop-shadow(0 0 30px rgba(0, 255, 136, 0.3));
+            }
+        }
+
+        /* Animated Title Styles */
+        .animated-title {
+            background: linear-gradient(45deg, var(--yellow), var(--green), var(--blue), var(--yellow));
+            background-size: 300% 300%;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: titleGradient 4s ease-in-out infinite;
+            text-shadow: 0 0 30px rgba(255, 215, 0, 0.3);
+        }
+
+        @keyframes titleGradient {
+            0%, 100% {
+                background-position: 0% 50%;
+            }
+            50% {
+                background-position: 100% 50%;
+            }
+        }
+
+        /* Animated Badge Styles */
+        .animated-badge {
+            animation: badgePulse 2s ease-in-out infinite;
+            box-shadow: 0 0 15px rgba(255, 215, 0, 0.3);
+        }
+
+        @keyframes badgePulse {
+            0%, 100% {
+                transform: scale(1);
+                box-shadow: 0 0 15px rgba(255, 215, 0, 0.3);
+            }
+            50% {
+                transform: scale(1.05);
+                box-shadow: 0 0 25px rgba(255, 215, 0, 0.6);
+            }
+        }
+
+        /* Collapsible Card Styles */
+        .card-content {
+            transition: all 0.4s ease;
+            overflow: hidden;
+            max-height: 1000px;
+            opacity: 1;
+        }
+
+        .card-content.collapsed {
+            max-height: 0;
+            opacity: 0;
+            padding-top: 0;
+            padding-bottom: 0;
+        }
+
+        .card-header {
+            transition: all 0.3s ease;
+            border-radius: 0.75rem 0.75rem 0 0;
+        }
+
+        .card-header:hover {
+            background: rgba(255, 215, 0, 0.1);
+        }
+
+        .card.collapsed .card-header {
+            border-radius: 0.75rem;
+        }
+
+        .rotate-180 {
+            transform: rotate(180deg);
+        }
+
+        /* Card hover effects */
+        .card {
+            transition: all 0.3s ease;
+            border: 1px solid rgba(255, 215, 0, 0.2);
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(255, 215, 0, 0.15);
+            border-color: rgba(255, 215, 0, 0.4);
+        }
+
+        .card.collapsed {
+            border-color: rgba(255, 215, 0, 0.1);
+        }
+
+        .card.collapsed:hover {
+            border-color: rgba(255, 215, 0, 0.3);
+        }
+
+        /* Notification Badge Styles */
+        .notification-container {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 9999;
+            pointer-events: none;
+        }
+
+        .notification-badge {
+            background: linear-gradient(135deg, var(--secondary-bg) 0%, var(--accent-bg) 100%);
+            border: 2px solid var(--yellow);
+            border-radius: 1rem;
+            padding: 1.5rem 2rem;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 20px rgba(255, 215, 0, 0.3);
+            backdrop-filter: blur(10px);
+            min-width: 300px;
+            text-align: center;
+            animation: notificationSlideIn 0.5s ease-out, notificationSlideOut 0.5s ease-in 4.5s forwards;
+        }
+
+        .notification-badge.position-open {
+            border-color: var(--green);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 20px rgba(0, 255, 136, 0.3);
+        }
+
+        .notification-badge.position-tp {
+            border-color: var(--green);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 20px rgba(0, 255, 136, 0.4);
+        }
+
+        .notification-badge.position-sl {
+            border-color: var(--red);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 20px rgba(255, 71, 87, 0.4);
+        }
+
+        .notification-icon {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+            display: block;
+        }
+
+        .notification-title {
+            font-size: 1.2rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+
+        .notification-details {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            line-height: 1.4;
+        }
+
+        .notification-pair {
+            font-size: 1.1rem;
+            font-weight: bold;
+            color: var(--yellow);
+            margin: 0.5rem 0;
+        }
+
+        @keyframes notificationSlideIn {
+            0% {
+                opacity: 0;
+                transform: translate(-50%, -50%) scale(0.8) translateY(-20px);
+            }
+            100% {
+                opacity: 1;
+                transform: translate(-50%, -50%) scale(1) translateY(0);
+            }
+        }
+
+        @keyframes notificationSlideOut {
+            0% {
+                opacity: 1;
+                transform: translate(-50%, -50%) scale(1) translateY(0);
+            }
+            100% {
+                opacity: 0;
+                transform: translate(-50%, -50%) scale(0.8) translateY(-20px);
+            }
+        }
         
         /* Mobile Responsive */
         @media (max-width: 768px) {
@@ -392,7 +606,7 @@
         </button>
         <div class="flex items-center space-x-2">
             <i class="fas fa-chart-line text-yellow-500 text-xl"></i>
-            <h1 class="text-lg font-bold text-yellow-500">Trading Bot</h1>
+            <h1 class="text-lg font-bold text-yellow-500">LevaTrade</h1>
         </div>
         <div class="text-right">
             <span class="text-sm text-gray-400" id="mobile-current-time"></span>
@@ -421,13 +635,13 @@
                     <div class="flex items-center space-x-3">
                         <i class="fas fa-flask text-yellow-500 sidebar-icon"></i>
                         <div class="sidebar-text">
-                            <div class="font-semibold">Dry Run</div>
-                            <div class="text-xs text-gray-400">Simulation Mode</div>
+                            <div class="font-semibold">LevaTrade</div>
+                            <div class="text-xs text-gray-400">AI Trading Assistant</div>
                         </div>
                     </div>
                 </div>
                 
-                <div class="sidebar-item p-4 rounded-lg cursor-pointer" onclick="switchMode('real-trade')" id="nav-real-trade" title="Real Trade Mode">
+                <!-- <div class="sidebar-item p-4 rounded-lg cursor-pointer" onclick="switchMode('real-trade')" id="nav-real-trade" title="Real Trade Mode">
                     <div class="flex items-center space-x-3">
                         <i class="fas fa-dollar-sign text-red-500 sidebar-icon"></i>
                         <div class="sidebar-text">
@@ -435,7 +649,7 @@
                             <div class="text-xs text-gray-400">Live Trading</div>
                         </div>
                     </div>
-                </div>
+                </div> -->
                 
                 <div class="sidebar-item p-4 rounded-lg cursor-pointer" onclick="toggleAIChat()" id="nav-ai-chat" title="AI Assistant">
                     <div class="flex items-center space-x-3">
@@ -443,6 +657,36 @@
                         <div class="sidebar-text">
                             <div class="font-semibold">AI Assistant</div>
                             <div class="text-xs text-gray-400">Analisis Pasar & Chat</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="sidebar-item p-4 rounded-lg cursor-pointer" onclick="showSessionAnalysis()" id="nav-session-analysis" title="Session Analysis">
+                    <div class="flex items-center space-x-3">
+                        <i class="fas fa-clock text-purple-500 sidebar-icon"></i>
+                        <div class="sidebar-text">
+                            <div class="font-semibold">Session Analysis</div>
+                            <div class="text-xs text-gray-400">Trading Session Performance</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="sidebar-item p-4 rounded-lg cursor-pointer" onclick="showIndicatorPerformance()" id="nav-indicator-performance" title="Indicator Performance">
+                    <div class="flex items-center space-x-3">
+                        <i class="fas fa-chart-bar text-orange-500 sidebar-icon"></i>
+                        <div class="sidebar-text">
+                            <div class="font-semibold">Indicator Performance</div>
+                            <div class="text-xs text-gray-400">Overall Indicator Analysis</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="sidebar-item p-4 rounded-lg cursor-pointer" onclick="showPairPerformance()" id="nav-pair-performance" title="Pair Performance">
+                    <div class="flex items-center space-x-3">
+                        <i class="fas fa-coins text-cyan-500 sidebar-icon"></i>
+                        <div class="sidebar-text">
+                            <div class="font-semibold">Pair Performance</div>
+                            <div class="text-xs text-gray-400">Trading Pair Analysis</div>
                         </div>
                     </div>
                 </div>
@@ -494,8 +738,14 @@
         <header class="bg-gray-900 border-b border-yellow-500/30 p-4">
             <div class="flex justify-between items-center">
                 <div class="flex items-center space-x-4">
-                    <h2 class="text-2xl font-bold text-white" id="dashboard-title">Dry Run Dashboard</h2>
-                    <span class="mode-badge mode-dry-run" id="mode-badge">Simulation Mode</span>
+                    <div class="flex items-center space-x-3">
+                        <!-- Animated Mascot -->
+                        <div class="mascot-container">
+                            <div class="anime-mascot">🤖</div>
+                        </div>
+                        <h2 class="text-2xl font-bold text-white animated-title" id="dashboard-title">LevaTrade</h2>
+                    </div>
+                    <span class="mode-badge mode-dry-run animated-badge" id="mode-badge">AI Trading Assistant</span>
                 </div>
                 <div class="flex items-center space-x-4">
                     <div class="flex items-center space-x-2">
@@ -575,7 +825,153 @@
         </div>
     </div>
 
-    <!-- AI Chat Modal -->
+    <!-- Indicator Performance Modal -->
+    <div id="indicatorPerformanceModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
+        <div class="bg-gray-900 rounded-lg p-6 max-w-6xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-semibold text-orange-500">
+                    <i class="fas fa-chart-bar mr-2"></i>Overall Indicator Performance
+                </h3>
+                <button onclick="closeIndicatorPerformance()" class="text-gray-400 hover:text-white">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            
+            <!-- Mode and Period Selection -->
+            <div class="mb-6 p-4 bg-gray-800 rounded-lg">
+                <div class="flex items-center justify-between flex-wrap gap-4">
+                    <div class="flex items-center space-x-4">
+                        <div class="flex items-center space-x-2">
+                            <i class="fas fa-info-circle text-blue-500"></i>
+                            <span class="text-sm text-gray-300">Mode:</span>
+                            <span class="font-semibold text-yellow-500" id="indicator-current-mode">Dry Run</span>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <i class="fas fa-calendar text-green-500"></i>
+                            <span class="text-sm text-gray-300">Period:</span>
+                            <select id="indicator-period-select" class="bg-gray-700 text-white px-3 py-1 rounded" onchange="loadIndicatorPerformance()">
+                                <option value="7">Last 7 days</option>
+                                <option value="14">Last 14 days</option>
+                                <option value="30" selected>Last 30 days</option>
+                                <option value="60">Last 60 days</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button onclick="loadIndicatorPerformance()" class="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg transition-colors">
+                        <i class="fas fa-sync-alt mr-2"></i>Refresh
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Indicator Performance Overview -->
+            <div id="indicator-overview" class="mb-6">
+                <!-- Will be populated by JavaScript -->
+            </div>
+            
+            <!-- Indicator Details -->
+            <div id="indicator-details">
+                <!-- Will be populated by JavaScript -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Pair Performance Modal -->
+    <div id="pairPerformanceModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
+        <div class="bg-gray-900 rounded-lg p-6 max-w-6xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-semibold text-cyan-500">
+                    <i class="fas fa-coins mr-2"></i>Trading Pair Performance
+                </h3>
+                <button onclick="closePairPerformance()" class="text-gray-400 hover:text-white">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            
+            <!-- Mode and Period Selection -->
+            <div class="mb-6 p-4 bg-gray-800 rounded-lg">
+                <div class="flex items-center justify-between flex-wrap gap-4">
+                    <div class="flex items-center space-x-4">
+                        <div class="flex items-center space-x-2">
+                            <i class="fas fa-info-circle text-blue-500"></i>
+                            <span class="text-sm text-gray-300">Mode:</span>
+                            <span class="font-semibold text-yellow-500" id="pair-current-mode">Dry Run</span>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <i class="fas fa-calendar text-green-500"></i>
+                            <span class="text-sm text-gray-300">Period:</span>
+                            <select id="pair-period-select" class="bg-gray-700 text-white px-3 py-1 rounded" onchange="loadPairPerformance()">
+                                <option value="7">Last 7 days</option>
+                                <option value="14">Last 14 days</option>
+                                <option value="30" selected>Last 30 days</option>
+                                <option value="60">Last 60 days</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button onclick="loadPairPerformance()" class="bg-cyan-600 hover:bg-cyan-700 text-white px-4 py-2 rounded-lg transition-colors">
+                        <i class="fas fa-sync-alt mr-2"></i>Refresh
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Pair Performance Overview -->
+            <div id="pair-overview" class="mb-6">
+                <!-- Will be populated by JavaScript -->
+            </div>
+            
+            <!-- Pair Details -->
+            <div id="pair-details">
+                <!-- Will be populated by JavaScript -->
+            </div>
+        </div>
+    </div>
+    <div id="sessionAnalysisModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
+        <div class="bg-gray-900 rounded-lg p-6 max-w-6xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-semibold text-purple-500">
+                    <i class="fas fa-clock mr-2"></i>Trading Session Analysis
+                </h3>
+                <button onclick="closeSessionAnalysis()" class="text-gray-400 hover:text-white">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            
+            <!-- Mode and Period Selection -->
+            <div class="mb-6 p-4 bg-gray-800 rounded-lg">
+                <div class="flex items-center justify-between flex-wrap gap-4">
+                    <div class="flex items-center space-x-4">
+                        <div class="flex items-center space-x-2">
+                            <i class="fas fa-info-circle text-blue-500"></i>
+                            <span class="text-sm text-gray-300">Mode:</span>
+                            <span class="font-semibold text-yellow-500" id="session-current-mode">Dry Run</span>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <i class="fas fa-calendar text-green-500"></i>
+                            <span class="text-sm text-gray-300">Period:</span>
+                            <select id="session-period-select" class="bg-gray-700 text-white px-3 py-1 rounded" onchange="loadSessionAnalysis()">
+                                <option value="7">Last 7 days</option>
+                                <option value="14">Last 14 days</option>
+                                <option value="30" selected>Last 30 days</option>
+                                <option value="60">Last 60 days</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button onclick="loadSessionAnalysis()" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg transition-colors">
+                        <i class="fas fa-sync-alt mr-2"></i>Refresh
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Session Performance Overview -->
+            <div id="session-overview" class="mb-6">
+                <!-- Will be populated by JavaScript -->
+            </div>
+            
+            <!-- Session Details -->
+            <div id="session-details" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Will be populated by JavaScript -->
+            </div>
+        </div>
+    </div>
     <div id="aiChatModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
         <div class="bg-gray-900 rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[80vh] flex flex-col">
             <div class="flex justify-between items-center mb-4">
@@ -631,6 +1027,18 @@
                     <button onclick="sendQuickMessage('Analisis riwayat trading terbaru saya')" class="quick-action-btn">
                         📋 Riwayat
                     </button>
+                    <button onclick="sendQuickMessage('Analisis performa trading per sesi market (Asia, London, New York)')" class="quick-action-btn">
+                        🕐 Sesi Trading
+                    </button>
+                    <button onclick="sendQuickMessage('Indikator mana yang paling efektif di setiap sesi trading?')" class="quick-action-btn">
+                        📊 Indikator per Sesi
+                    </button>
+                    <button onclick="sendQuickMessage('Analisis performa keseluruhan semua indikator teknikal saya')" class="quick-action-btn">
+                        🎯 Performa Indikator
+                    </button>
+                    <button onclick="sendQuickMessage('Analisis performa semua trading pair yang pernah saya tradingkan')" class="quick-action-btn">
+                        💰 Performa Pair
+                    </button>
                 </div>
             </div>
             
@@ -654,6 +1062,11 @@
         </div>
     </div>
 
+    <!-- Notification Container -->
+    <div class="notification-container" id="notification-container">
+        <!-- Notifications will be dynamically added here -->
+    </div>
+
     <script>
         // Socket.IO connection
         const socket = io();
@@ -664,11 +1077,17 @@
         // Current mode
         let currentMode = 'dry-run';
         
+        // Notification polling
+        let lastNotificationId = 0;
+        
         // Initialize dashboard
         document.addEventListener('DOMContentLoaded', function() {
             loadDashboardContent();
             updateTime();
             setInterval(updateTime, 1000);
+            
+            // Start notification polling
+            startNotificationPolling();
             
             // Auto refresh dashboard setiap 30 detik (backup untuk Socket.IO)
             setInterval(() => {
@@ -697,6 +1116,19 @@
         
         socket.on('new_signal', function(signal) {
             showNewSignalNotification(signal);
+        });
+        
+        // Position notification events
+        socket.on('position_opened', function(data) {
+            showPositionNotification('open', data);
+        });
+        
+        socket.on('position_closed', function(data) {
+            if (data.exit_reason === 'TP_HIT') {
+                showPositionNotification('tp', data);
+            } else if (data.exit_reason === 'SL_HIT') {
+                showPositionNotification('sl', data);
+            }
         });
         
         function updateTime() {
@@ -733,13 +1165,13 @@
             
             // Update header
             if (mode === 'dry-run') {
-                document.getElementById('dashboard-title').textContent = 'Dry Run Dashboard';
-                document.getElementById('mode-badge').textContent = 'Simulation Mode';
-                document.getElementById('mode-badge').className = 'mode-badge mode-dry-run';
+                document.getElementById('dashboard-title').textContent = 'LevaTrade';
+                document.getElementById('mode-badge').textContent = 'AI Trading Assistant';
+                document.getElementById('mode-badge').className = 'mode-badge mode-dry-run animated-badge';
             } else {
-                document.getElementById('dashboard-title').textContent = 'Real Trade Dashboard';
-                document.getElementById('mode-badge').textContent = 'Live Trading';
-                document.getElementById('mode-badge').className = 'mode-badge mode-real-trade';
+                document.getElementById('dashboard-title').textContent = 'LevaTrade';
+                document.getElementById('mode-badge').textContent = 'Live Trading Mode';
+                document.getElementById('mode-badge').className = 'mode-badge mode-real-trade animated-badge';
             }
             
             // Reload data for selected mode with current pagination settings
@@ -760,7 +1192,590 @@
             alert('Logs panel coming soon!');
         }
         
-        // AI Chat Functions
+        // Indicator Performance Functions
+        function showIndicatorPerformance() {
+            const modal = document.getElementById('indicatorPerformanceModal');
+            const modeIndicator = document.getElementById('indicator-current-mode');
+            
+            // Update mode indicator
+            modeIndicator.textContent = currentMode === 'dry-run' ? 'Simulasi (Dry Run)' : 'Trading Nyata';
+            
+            // Show modal
+            modal.classList.remove('hidden');
+            
+            // Load indicator performance data
+            loadIndicatorPerformance();
+            
+            // Close sidebar on mobile
+            if (window.innerWidth <= 768) {
+                closeSidebar();
+            }
+        }
+        
+        function closeIndicatorPerformance() {
+            document.getElementById('indicatorPerformanceModal').classList.add('hidden');
+        }
+        
+        async function loadIndicatorPerformance() {
+            const mode = currentMode;
+            const days = document.getElementById('indicator-period-select').value;
+            
+            try {
+                // Show loading
+                document.getElementById('indicator-overview').innerHTML = '<div class="text-center py-8"><i class="fas fa-spinner fa-spin text-2xl text-orange-500"></i><p class="mt-2 text-gray-400">Loading indicator performance...</p></div>';
+                document.getElementById('indicator-details').innerHTML = '';
+                
+                // Fetch indicator performance data
+                const response = await fetch(`/api/indicator-performance?mode=${mode}&days=${days}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    displayIndicatorOverview(data);
+                    displayIndicatorDetails(data);
+                } else {
+                    document.getElementById('indicator-overview').innerHTML = `<div class="text-center py-8 text-red-500"><i class="fas fa-exclamation-triangle text-2xl"></i><p class="mt-2">Error: ${data.error || 'Failed to load indicator data'}</p></div>`;
+                }
+                
+            } catch (error) {
+                console.error('Indicator performance error:', error);
+                document.getElementById('indicator-overview').innerHTML = '<div class="text-center py-8 text-red-500"><i class="fas fa-exclamation-triangle text-2xl"></i><p class="mt-2">Failed to load indicator performance</p></div>';
+            }
+        }
+        
+        function displayIndicatorOverview(data) {
+            const overview = document.getElementById('indicator-overview');
+            const indicators = data.indicators;
+            
+            // Calculate totals
+            const totalIndicators = Object.keys(indicators).length;
+            const avgAccuracy = totalIndicators > 0 ? 
+                Object.values(indicators).reduce((sum, ind) => sum + ind.overall_accuracy, 0) / totalIndicators : 0;
+            
+            // Find best indicators
+            const sortedByAccuracy = Object.entries(indicators).sort(([,a], [,b]) => b.overall_accuracy - a.overall_accuracy);
+            const bestIndicator = sortedByAccuracy[0];
+            const worstIndicator = sortedByAccuracy[sortedByAccuracy.length - 1];
+            
+            overview.innerHTML = `
+                <div class="card p-6">
+                    <h4 class="text-lg font-semibold text-orange-500 mb-4">
+                        <i class="fas fa-chart-line mr-2"></i>Indicator Performance Overview (${data.days_analyzed} days)
+                    </h4>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                        <div class="bg-gray-800 p-4 rounded-lg text-center">
+                            <div class="text-2xl font-bold text-white">${totalIndicators}</div>
+                            <div class="text-sm text-gray-400">Total Indicators</div>
+                        </div>
+                        <div class="bg-gray-800 p-4 rounded-lg text-center">
+                            <div class="text-2xl font-bold text-blue-500">${avgAccuracy.toFixed(1)}%</div>
+                            <div class="text-sm text-gray-400">Avg Accuracy</div>
+                        </div>
+                        <div class="bg-gray-800 p-4 rounded-lg text-center">
+                            <div class="text-2xl font-bold text-white">${data.total_trades_analyzed}</div>
+                            <div class="text-sm text-gray-400">Trades Analyzed</div>
+                        </div>
+                        <div class="bg-gray-800 p-4 rounded-lg text-center">
+                            <div class="text-lg font-bold text-green-500">${bestIndicator ? bestIndicator[1].description : 'N/A'}</div>
+                            <div class="text-sm text-gray-400">Best Indicator</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Top/Bottom Indicators -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="bg-gray-800 p-4 rounded-lg">
+                            <h5 class="text-green-500 font-semibold mb-3">🏆 Top Performers</h5>
+                            ${sortedByAccuracy.slice(0, 5).map(([name, ind]) => `
+                                <div class="flex justify-between items-center mb-2">
+                                    <span class="text-sm">${ind.description}</span>
+                                    <span class="text-green-500 font-semibold">${ind.overall_accuracy.toFixed(1)}%</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                        <div class="bg-gray-800 p-4 rounded-lg">
+                            <h5 class="text-red-500 font-semibold mb-3">⚠️ Needs Improvement</h5>
+                            ${sortedByAccuracy.slice(-5).reverse().map(([name, ind]) => `
+                                <div class="flex justify-between items-center mb-2">
+                                    <span class="text-sm">${ind.description}</span>
+                                    <span class="text-red-500 font-semibold">${ind.overall_accuracy.toFixed(1)}%</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        function displayIndicatorDetails(data) {
+            const details = document.getElementById('indicator-details');
+            const indicators = data.indicators;
+            
+            details.innerHTML = `
+                <div class="card p-6">
+                    <h4 class="text-lg font-semibold text-orange-500 mb-4">
+                        <i class="fas fa-list mr-2"></i>Detailed Indicator Analysis
+                    </h4>
+                    
+                    <div class="overflow-x-auto">
+                        <table class="w-full">
+                            <thead>
+                                <tr class="border-b border-gray-700">
+                                    <th class="text-left py-3 px-4 text-gray-400">Indicator</th>
+                                    <th class="text-left py-3 px-4 text-gray-400">Category</th>
+                                    <th class="text-left py-3 px-4 text-gray-400">Accuracy</th>
+                                    <th class="text-left py-3 px-4 text-gray-400">Pass Rate</th>
+                                    <th class="text-left py-3 px-4 text-gray-400">Win When Passed</th>
+                                    <th class="text-left py-3 px-4 text-gray-400">Win When Failed</th>
+                                    <th class="text-left py-3 px-4 text-gray-400">Total Trades</th>
+                                    <th class="text-left py-3 px-4 text-gray-400">Symbols</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${Object.entries(indicators).map(([name, ind]) => `
+                                    <tr class="border-b border-gray-800 hover:bg-gray-800">
+                                        <td class="py-3 px-4 font-semibold">${ind.description}</td>
+                                        <td class="py-3 px-4">
+                                            <span class="px-2 py-1 rounded text-xs bg-blue-500 text-white">${ind.category}</span>
+                                        </td>
+                                        <td class="py-3 px-4">
+                                            <span class="font-semibold ${ind.overall_accuracy >= 70 ? 'text-green-500' : ind.overall_accuracy >= 50 ? 'text-yellow-500' : 'text-red-500'}">
+                                                ${ind.overall_accuracy.toFixed(1)}%
+                                            </span>
+                                        </td>
+                                        <td class="py-3 px-4">${ind.pass_rate.toFixed(1)}%</td>
+                                        <td class="py-3 px-4 text-green-500">${ind.win_rate_when_passed.toFixed(1)}%</td>
+                                        <td class="py-3 px-4 text-red-500">${ind.win_rate_when_failed.toFixed(1)}%</td>
+                                        <td class="py-3 px-4">${ind.total_trades}</td>
+                                        <td class="py-3 px-4">${ind.symbols_traded.length}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        }
+        
+        // Pair Performance Functions
+        function showPairPerformance() {
+            const modal = document.getElementById('pairPerformanceModal');
+            const modeIndicator = document.getElementById('pair-current-mode');
+            
+            // Update mode indicator
+            modeIndicator.textContent = currentMode === 'dry-run' ? 'Simulasi (Dry Run)' : 'Trading Nyata';
+            
+            // Show modal
+            modal.classList.remove('hidden');
+            
+            // Load pair performance data
+            loadPairPerformance();
+            
+            // Close sidebar on mobile
+            if (window.innerWidth <= 768) {
+                closeSidebar();
+            }
+        }
+        
+        function closePairPerformance() {
+            document.getElementById('pairPerformanceModal').classList.add('hidden');
+        }
+        
+        async function loadPairPerformance() {
+            const mode = currentMode;
+            const days = document.getElementById('pair-period-select').value;
+            
+            try {
+                // Show loading
+                document.getElementById('pair-overview').innerHTML = '<div class="text-center py-8"><i class="fas fa-spinner fa-spin text-2xl text-cyan-500"></i><p class="mt-2 text-gray-400">Loading pair performance...</p></div>';
+                document.getElementById('pair-details').innerHTML = '';
+                
+                // Fetch pair performance data
+                const response = await fetch(`/api/pair-performance?mode=${mode}&days=${days}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    displayPairOverview(data);
+                    displayPairDetails(data);
+                } else {
+                    document.getElementById('pair-overview').innerHTML = `<div class="text-center py-8 text-red-500"><i class="fas fa-exclamation-triangle text-2xl"></i><p class="mt-2">Error: ${data.error || 'Failed to load pair data'}</p></div>`;
+                }
+                
+            } catch (error) {
+                console.error('Pair performance error:', error);
+                document.getElementById('pair-overview').innerHTML = '<div class="text-center py-8 text-red-500"><i class="fas fa-exclamation-triangle text-2xl"></i><p class="mt-2">Failed to load pair performance</p></div>';
+            }
+        }
+        
+        function displayPairOverview(data) {
+            const overview = document.getElementById('pair-overview');
+            const pairs = data.pairs;
+            
+            // Calculate totals
+            const totalPairs = Object.keys(pairs).length;
+            const totalPnl = Object.values(pairs).reduce((sum, pair) => sum + pair.total_pnl, 0);
+            const avgWinRate = totalPairs > 0 ? 
+                Object.values(pairs).reduce((sum, pair) => sum + pair.win_rate, 0) / totalPairs : 0;
+            
+            // Find best/worst pairs
+            const sortedByPnl = Object.entries(pairs).sort(([,a], [,b]) => b.total_pnl - a.total_pnl);
+            const bestPair = sortedByPnl[0];
+            const worstPair = sortedByPnl[sortedByPnl.length - 1];
+            
+            // Count by volume categories
+            const volumeCategories = {
+                'KOIN_BESAR': 0,
+                'MENENGAH': 0,
+                'KOIN_KECIL': 0
+            };
+            
+            Object.values(pairs).forEach(pair => {
+                const category = pair.current_volume_category?.category || 'KOIN_KECIL';
+                volumeCategories[category]++;
+            });
+            
+            overview.innerHTML = `
+                <div class="card p-6">
+                    <h4 class="text-lg font-semibold text-cyan-500 mb-4">
+                        <i class="fas fa-chart-pie mr-2"></i>Pair Performance Overview (${data.days_analyzed} days)
+                    </h4>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                        <div class="bg-gray-800 p-4 rounded-lg text-center">
+                            <div class="text-2xl font-bold text-white">${totalPairs}</div>
+                            <div class="text-sm text-gray-400">Total Pairs</div>
+                        </div>
+                        <div class="bg-gray-800 p-4 rounded-lg text-center">
+                            <div class="text-2xl font-bold ${totalPnl >= 0 ? 'text-green-500' : 'text-red-500'}">${totalPnl.toFixed(2)}</div>
+                            <div class="text-sm text-gray-400">Total PnL</div>
+                        </div>
+                        <div class="bg-gray-800 p-4 rounded-lg text-center">
+                            <div class="text-2xl font-bold text-blue-500">${avgWinRate.toFixed(1)}%</div>
+                            <div class="text-sm text-gray-400">Avg Win Rate</div>
+                        </div>
+                        <div class="bg-gray-800 p-4 rounded-lg text-center">
+                            <div class="text-lg font-bold text-green-500">${bestPair ? bestPair[0] : 'N/A'}</div>
+                            <div class="text-sm text-gray-400">Best Pair</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Volume Categories -->
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div class="bg-gray-800 p-4 rounded-lg border-l-4 border-green-500">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-lg">🟢</span>
+                                <span class="text-xs text-gray-400">KOIN BESAR (>$500M)</span>
+                            </div>
+                            <div class="text-2xl font-bold text-white">${volumeCategories.KOIN_BESAR}</div>
+                            <div class="text-sm text-gray-400">pairs</div>
+                        </div>
+                        <div class="bg-gray-800 p-4 rounded-lg border-l-4 border-yellow-500">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-lg">🟡</span>
+                                <span class="text-xs text-gray-400">MENENGAH ($100M-$500M)</span>
+                            </div>
+                            <div class="text-2xl font-bold text-white">${volumeCategories.MENENGAH}</div>
+                            <div class="text-sm text-gray-400">pairs</div>
+                        </div>
+                        <div class="bg-gray-800 p-4 rounded-lg border-l-4 border-red-500">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-lg">🔴</span>
+                                <span class="text-xs text-gray-400">KOIN KECIL (<$100M)</span>
+                            </div>
+                            <div class="text-2xl font-bold text-white">${volumeCategories.KOIN_KECIL}</div>
+                            <div class="text-sm text-gray-400">pairs</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        function displayPairDetails(data) {
+            const details = document.getElementById('pair-details');
+            const pairs = data.pairs;
+            
+            details.innerHTML = `
+                <div class="card p-6">
+                    <h4 class="text-lg font-semibold text-cyan-500 mb-4">
+                        <i class="fas fa-table mr-2"></i>Detailed Pair Analysis
+                    </h4>
+                    
+                    <div class="overflow-x-auto">
+                        <table class="w-full">
+                            <thead>
+                                <tr class="border-b border-gray-700">
+                                    <th class="text-left py-3 px-4 text-gray-400">Pair</th>
+                                    <th class="text-left py-3 px-4 text-gray-400">Total PnL</th>
+                                    <th class="text-left py-3 px-4 text-gray-400">Win Rate</th>
+                                    <th class="text-left py-3 px-4 text-gray-400">Trades</th>
+                                    <th class="text-left py-3 px-4 text-gray-400">LONG/SHORT</th>
+                                    <th class="text-left py-3 px-4 text-gray-400">Volume 24h</th>
+                                    <th class="text-left py-3 px-4 text-gray-400">Market Cap</th>
+                                    <th class="text-left py-3 px-4 text-gray-400">Category</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${Object.entries(pairs).map(([symbol, pair]) => `
+                                    <tr class="border-b border-gray-800 hover:bg-gray-800">
+                                        <td class="py-3 px-4 font-semibold">${symbol}</td>
+                                        <td class="py-3 px-4">
+                                            <span class="font-semibold ${pair.total_pnl >= 0 ? 'text-green-500' : 'text-red-500'}">
+                                                ${pair.total_pnl.toFixed(2)}
+                                            </span>
+                                        </td>
+                                        <td class="py-3 px-4">
+                                            <span class="${pair.win_rate >= 50 ? 'text-green-500' : 'text-red-500'}">
+                                                ${pair.win_rate.toFixed(1)}%
+                                            </span>
+                                        </td>
+                                        <td class="py-3 px-4">${pair.total_trades}</td>
+                                        <td class="py-3 px-4 text-sm">
+                                            <div>L: ${pair.long_percentage.toFixed(0)}%</div>
+                                            <div>S: ${pair.short_percentage.toFixed(0)}%</div>
+                                        </td>
+                                        <td class="py-3 px-4 text-sm">
+                                            ${pair.current_volume_category?.color || '❓'} $${(pair.current_volume_24h / 1000000).toFixed(0)}M
+                                        </td>
+                                        <td class="py-3 px-4 text-sm">
+                                            ${pair.current_market_cap_category?.color || '❓'} $${(pair.current_market_cap / 1000000000).toFixed(1)}B
+                                        </td>
+                                        <td class="py-3 px-4">
+                                            <div class="text-xs">
+                                                <div>${pair.current_volume_category?.category || 'Unknown'}</div>
+                                                <div>${pair.current_market_cap_category?.category || 'Unknown'}</div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        }
+        function showSessionAnalysis() {
+            const modal = document.getElementById('sessionAnalysisModal');
+            const modeIndicator = document.getElementById('session-current-mode');
+            
+            // Update mode indicator
+            modeIndicator.textContent = currentMode === 'dry-run' ? 'Simulasi (Dry Run)' : 'Trading Nyata';
+            
+            // Show modal
+            modal.classList.remove('hidden');
+            
+            // Load session analysis data
+            loadSessionAnalysis();
+            
+            // Close sidebar on mobile
+            if (window.innerWidth <= 768) {
+                closeSidebar();
+            }
+        }
+        
+        function closeSessionAnalysis() {
+            document.getElementById('sessionAnalysisModal').classList.add('hidden');
+        }
+        
+        async function loadSessionAnalysis() {
+            const mode = currentMode;
+            const days = document.getElementById('session-period-select').value;
+            
+            try {
+                // Show loading
+                document.getElementById('session-overview').innerHTML = '<div class="text-center py-8"><i class="fas fa-spinner fa-spin text-2xl text-purple-500"></i><p class="mt-2 text-gray-400">Loading session analysis...</p></div>';
+                document.getElementById('session-details').innerHTML = '';
+                
+                // Fetch session performance data
+                const response = await fetch(`/api/session-performance?mode=${mode}&days=${days}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    displaySessionOverview(data);
+                    displaySessionDetails(data);
+                } else {
+                    document.getElementById('session-overview').innerHTML = `<div class="text-center py-8 text-red-500"><i class="fas fa-exclamation-triangle text-2xl"></i><p class="mt-2">Error: ${data.error || 'Failed to load session data'}</p></div>`;
+                }
+                
+            } catch (error) {
+                console.error('Session analysis error:', error);
+                document.getElementById('session-overview').innerHTML = '<div class="text-center py-8 text-red-500"><i class="fas fa-exclamation-triangle text-2xl"></i><p class="mt-2">Failed to load session analysis</p></div>';
+            }
+        }
+        
+        function displaySessionOverview(data) {
+            const overview = document.getElementById('session-overview');
+            const sessions = data.sessions;
+            
+            // Calculate totals
+            const totalTrades = Object.values(sessions).reduce((sum, s) => sum + s.total_trades, 0);
+            const totalPnl = Object.values(sessions).reduce((sum, s) => sum + s.total_pnl, 0);
+            const overallWinRate = totalTrades > 0 ? 
+                (Object.values(sessions).reduce((sum, s) => sum + s.winning_trades, 0) / totalTrades * 100) : 0;
+            
+            // Find best session by win rate
+            const activeSessions = Object.entries(sessions).filter(([_, s]) => s.total_trades > 0);
+            const bestSession = activeSessions.length > 0 ? 
+                activeSessions.reduce((best, current) => 
+                    current[1].win_rate > best[1].win_rate ? current : best
+                ) : null;
+            
+            overview.innerHTML = `
+                <div class="card p-6">
+                    <h4 class="text-lg font-semibold text-purple-500 mb-4">
+                        <i class="fas fa-chart-bar mr-2"></i>Session Performance Overview (${data.days_analyzed} days)
+                    </h4>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                        <div class="bg-gray-800 p-4 rounded-lg text-center">
+                            <div class="text-2xl font-bold text-white">${totalTrades}</div>
+                            <div class="text-sm text-gray-400">Total Trades</div>
+                        </div>
+                        <div class="bg-gray-800 p-4 rounded-lg text-center">
+                            <div class="text-2xl font-bold ${totalPnl >= 0 ? 'text-green-500' : 'text-red-500'}">${totalPnl.toFixed(2)}</div>
+                            <div class="text-sm text-gray-400">Total PnL</div>
+                        </div>
+                        <div class="bg-gray-800 p-4 rounded-lg text-center">
+                            <div class="text-2xl font-bold text-blue-500">${overallWinRate.toFixed(1)}%</div>
+                            <div class="text-sm text-gray-400">Overall Win Rate</div>
+                        </div>
+                        <div class="bg-gray-800 p-4 rounded-lg text-center">
+                            <div class="text-lg font-bold text-purple-500">${bestSession ? bestSession[1].color + ' ' + bestSession[1].name : 'N/A'}</div>
+                            <div class="text-sm text-gray-400">Best Session</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Session Quick Stats -->
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        ${Object.entries(sessions).map(([sessionKey, session]) => `
+                            <div class="bg-gray-800 p-3 rounded-lg border-l-4 border-purple-500">
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="text-lg">${session.color}</span>
+                                    <span class="text-xs text-gray-400">${session.name}</span>
+                                </div>
+                                <div class="text-sm">
+                                    <div class="text-white font-semibold">${session.total_trades} trades</div>
+                                    <div class="${session.win_rate >= 50 ? 'text-green-500' : 'text-red-500'}">${session.win_rate.toFixed(1)}% WR</div>
+                                    <div class="${session.total_pnl >= 0 ? 'text-green-500' : 'text-red-500'}">${session.total_pnl.toFixed(2)} PnL</div>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+        
+        function displaySessionDetails(data) {
+            const details = document.getElementById('session-details');
+            const sessions = data.sessions;
+            
+            details.innerHTML = Object.entries(sessions).map(([sessionKey, session]) => {
+                if (session.total_trades === 0) {
+                    return `
+                        <div class="card p-6">
+                            <h5 class="text-lg font-semibold mb-4 flex items-center">
+                                <span class="text-2xl mr-3">${session.color}</span>
+                                ${session.name}
+                            </h5>
+                            <div class="text-center py-8 text-gray-500">
+                                <i class="fas fa-chart-line text-3xl mb-3"></i>
+                                <p>No trades in this session</p>
+                                <p class="text-sm mt-1">${session.description}</p>
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                // Get top symbols
+                const topSymbols = Object.entries(session.symbols)
+                    .sort(([,a], [,b]) => b.win_rate - a.win_rate)
+                    .slice(0, 3);
+                
+                // Get top indicators
+                const topIndicators = Object.entries(session.indicator_performance)
+                    .filter(([_, ind]) => ind.total_passed > 0)
+                    .sort(([,a], [,b]) => (b.wins_when_passed / b.total_passed) - (a.wins_when_passed / a.total_passed))
+                    .slice(0, 3);
+                
+                return `
+                    <div class="card p-6">
+                        <h5 class="text-lg font-semibold mb-4 flex items-center">
+                            <span class="text-2xl mr-3">${session.color}</span>
+                            ${session.name}
+                            <span class="ml-auto text-sm text-gray-400">${session.description}</span>
+                        </h5>
+                        
+                        <!-- Performance Metrics -->
+                        <div class="grid grid-cols-2 gap-4 mb-6">
+                            <div class="bg-gray-800 p-3 rounded">
+                                <div class="text-sm text-gray-400">Win Rate</div>
+                                <div class="text-xl font-bold ${session.win_rate >= 50 ? 'text-green-500' : 'text-red-500'}">
+                                    ${session.win_rate.toFixed(1)}%
+                                </div>
+                                <div class="text-xs text-gray-500">${session.winning_trades}W / ${session.losing_trades}L</div>
+                            </div>
+                            <div class="bg-gray-800 p-3 rounded">
+                                <div class="text-sm text-gray-400">Total PnL</div>
+                                <div class="text-xl font-bold ${session.total_pnl >= 0 ? 'text-green-500' : 'text-red-500'}">
+                                    ${session.total_pnl.toFixed(2)}
+                                </div>
+                                <div class="text-xs text-gray-500">${session.total_trades} trades</div>
+                            </div>
+                            <div class="bg-gray-800 p-3 rounded">
+                                <div class="text-sm text-gray-400">Avg Win</div>
+                                <div class="text-lg font-bold text-green-500">${session.avg_win.toFixed(2)}</div>
+                            </div>
+                            <div class="bg-gray-800 p-3 rounded">
+                                <div class="text-sm text-gray-400">Avg Loss</div>
+                                <div class="text-lg font-bold text-red-500">${session.avg_loss.toFixed(2)}</div>
+                            </div>
+                            <div class="bg-gray-800 p-3 rounded">
+                                <div class="text-sm text-gray-400">Max Win</div>
+                                <div class="text-lg font-bold text-green-500">${session.max_win.toFixed(2)}%</div>
+                            </div>
+                            <div class="bg-gray-800 p-3 rounded">
+                                <div class="text-sm text-gray-400">Max Loss</div>
+                                <div class="text-lg font-bold text-red-500">${session.max_loss.toFixed(2)}%</div>
+                            </div>
+                        </div>
+                        
+                        <!-- Top Symbols -->
+                        <div class="mb-4">
+                            <h6 class="text-sm font-semibold text-gray-300 mb-2">
+                                <i class="fas fa-star mr-1"></i>Top Performing Symbols
+                            </h6>
+                            <div class="space-y-2">
+                                ${topSymbols.length > 0 ? topSymbols.map(([symbol, stats]) => `
+                                    <div class="flex justify-between items-center bg-gray-800 p-2 rounded text-sm">
+                                        <span class="font-semibold">${symbol}</span>
+                                        <div class="text-right">
+                                            <div class="${stats.win_rate >= 50 ? 'text-green-500' : 'text-red-500'}">${stats.win_rate.toFixed(1)}% WR</div>
+                                            <div class="text-xs text-gray-400">${stats.trades} trades</div>
+                                        </div>
+                                    </div>
+                                `).join('') : '<div class="text-gray-500 text-sm">No symbol data available</div>'}
+                            </div>
+                        </div>
+                        
+                        <!-- Top Indicators -->
+                        <div>
+                            <h6 class="text-sm font-semibold text-gray-300 mb-2">
+                                <i class="fas fa-chart-bar mr-1"></i>Best Indicators
+                            </h6>
+                            <div class="space-y-2">
+                                ${topIndicators.length > 0 ? topIndicators.map(([indicator, stats]) => `
+                                    <div class="flex justify-between items-center bg-gray-800 p-2 rounded text-sm">
+                                        <span class="font-semibold">${indicator.replace(/_/g, ' ').toUpperCase()}</span>
+                                        <div class="text-right">
+                                            <div class="text-green-500">${((stats.wins_when_passed / stats.total_passed) * 100).toFixed(1)}% WR</div>
+                                            <div class="text-xs text-gray-400">${stats.total_passed} passed</div>
+                                        </div>
+                                    </div>
+                                `).join('') : '<div class="text-gray-500 text-sm">No indicator data available</div>'}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
         function toggleAIChat() {
             const modal = document.getElementById('aiChatModal');
             const modeIndicator = document.getElementById('ai-current-mode');
@@ -923,6 +1938,25 @@
                 closeAIChat();
             }
         });
+        
+        // Collapsible Card Toggle Function
+        function toggleCard(cardId) {
+            const content = document.getElementById(cardId + '-content');
+            const icon = document.getElementById(cardId + '-icon');
+            const card = content.closest('.card');
+            
+            if (content.classList.contains('collapsed')) {
+                // Expand
+                content.classList.remove('collapsed');
+                icon.classList.remove('rotate-180');
+                card.classList.remove('collapsed');
+            } else {
+                // Collapse
+                content.classList.add('collapsed');
+                icon.classList.add('rotate-180');
+                card.classList.add('collapsed');
+            }
+        }
         
         // Desktop Sidebar Toggle Functions
         function toggleSidebarDesktop() {
@@ -1102,22 +2136,33 @@
                 <!-- Charts Row -->
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <!-- Balance Chart -->
-                    <div class="card p-6">
-                        <h3 class="text-xl font-semibold mb-4 text-yellow-500">
-                            <i class="fas fa-chart-area mr-2"></i>Balance Performance
-                        </h3>
-                        <div class="chart-container">
-                            <canvas id="balanceChart"></canvas>
+                    <!-- Balance Performance Card -->
+                    <div class="card">
+                        <div class="flex justify-between items-center p-4 cursor-pointer border-b border-gray-700" onclick="toggleCard('balance-performance')">
+                            <h3 class="text-xl font-semibold text-yellow-500">
+                                <i class="fas fa-chart-area mr-2"></i>Balance Performance
+                            </h3>
+                            <i class="fas fa-chevron-down transition-transform duration-300" id="balance-performance-icon"></i>
+                        </div>
+                        <div class="card-content p-6" id="balance-performance-content">
+                            <div class="chart-container">
+                                <canvas id="balanceChart"></canvas>
+                            </div>
                         </div>
                     </div>
 
-                    <!-- PnL Distribution -->
-                    <div class="card p-6">
-                        <h3 class="text-xl font-semibold mb-4 text-yellow-500">
-                            <i class="fas fa-chart-pie mr-2"></i>PnL Distribution
-                        </h3>
-                        <div class="chart-container">
-                            <canvas id="pnlChart"></canvas>
+                    <!-- PnL Distribution Card -->
+                    <div class="card">
+                        <div class="flex justify-between items-center p-4 cursor-pointer border-b border-gray-700" onclick="toggleCard('pnl-distribution')">
+                            <h3 class="text-xl font-semibold text-yellow-500">
+                                <i class="fas fa-chart-pie mr-2"></i>PnL Distribution
+                            </h3>
+                            <i class="fas fa-chevron-down transition-transform duration-300" id="pnl-distribution-icon"></i>
+                        </div>
+                        <div class="card-content p-6" id="pnl-distribution-content">
+                            <div class="chart-container">
+                                <canvas id="pnlChart"></canvas>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1601,6 +2646,130 @@
             setTimeout(() => {
                 notification.remove();
             }, 5000);
+        }
+        
+        function showPositionNotification(type, data) {
+            const container = document.getElementById('notification-container');
+            if (!container) return;
+            
+            // Create notification element
+            const notification = document.createElement('div');
+            notification.className = `notification-badge position-${type}`;
+            
+            let icon, title, details;
+            
+            switch(type) {
+                case 'open':
+                    icon = '🚀';
+                    title = 'Position Opened';
+                    details = `
+                        <div class="notification-pair">${data.symbol}</div>
+                        <div class="notification-details">
+                            Direction: <strong>${data.direction}</strong><br>
+                            Entry: <strong>$${parseFloat(data.entry_price).toFixed(6)}</strong><br>
+                            TP: <strong>$${parseFloat(data.tp_price).toFixed(6)}</strong><br>
+                            SL: <strong>$${parseFloat(data.sl_price).toFixed(6)}</strong>
+                        </div>
+                    `;
+                    break;
+                    
+                case 'tp':
+                    icon = '🎯';
+                    title = 'Take Profit Hit!';
+                    details = `
+                        <div class="notification-pair">${data.symbol}</div>
+                        <div class="notification-details">
+                            Direction: <strong>${data.direction}</strong><br>
+                            Exit: <strong>$${parseFloat(data.exit_price).toFixed(6)}</strong><br>
+                            PnL: <strong class="text-green-500">+$${parseFloat(data.pnl).toFixed(2)}</strong>
+                        </div>
+                    `;
+                    break;
+                    
+                case 'sl':
+                    icon = '🛑';
+                    title = 'Stop Loss Hit';
+                    details = `
+                        <div class="notification-pair">${data.symbol}</div>
+                        <div class="notification-details">
+                            Direction: <strong>${data.direction}</strong><br>
+                            Exit: <strong>$${parseFloat(data.exit_price).toFixed(6)}</strong><br>
+                            PnL: <strong class="text-red-500">$${parseFloat(data.pnl).toFixed(2)}</strong>
+                        </div>
+                    `;
+                    break;
+            }
+            
+            notification.innerHTML = `
+                <div class="notification-icon">${icon}</div>
+                <div class="notification-title">${title}</div>
+                ${details}
+            `;
+            
+            // Add to container
+            container.appendChild(notification);
+            
+            // Auto remove after 5 seconds
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.remove();
+                }
+            }, 5000);
+        }
+        
+        function startNotificationPolling() {
+            console.log('🔔 Starting notification polling...');
+            // Poll for new notifications every 2 seconds
+            setInterval(async () => {
+                try {
+                    console.log(`🔍 Polling notifications with last_id: ${lastNotificationId}`);
+                    const response = await fetch(`/api/notifications?last_id=${lastNotificationId}`);
+                    const data = await response.json();
+                    
+                    if (data.success && data.notifications.length > 0) {
+                        console.log(`📬 Received ${data.notifications.length} new notifications`);
+                        data.notifications.forEach(notification => {
+                            console.log('📨 Processing notification:', notification);
+                            handleNotification(notification);
+                            lastNotificationId = Math.max(lastNotificationId, notification.id);
+                        });
+                    }
+                } catch (error) {
+                    console.error('❌ Error polling notifications:', error);
+                }
+            }, 2000); // Poll every 2 seconds
+        }
+        
+        function handleNotification(notification) {
+            const { type, data } = notification;
+            console.log(`🎯 Handling notification type: ${type}, mode: ${data.mode}, current mode: ${currentMode}`);
+            
+            switch(type) {
+                case 'position_opened':
+                    // Only show notification if it matches current mode
+                    if (data.mode === currentMode) {
+                        console.log('✅ Showing position opened notification');
+                        showPositionNotification('open', data);
+                    } else {
+                        console.log('⏭️ Skipping notification - mode mismatch');
+                    }
+                    break;
+                    
+                case 'position_closed':
+                    // Only show notification if it matches current mode
+                    if (data.mode === currentMode) {
+                        if (data.exit_reason === 'TP_HIT') {
+                            console.log('✅ Showing TP hit notification');
+                            showPositionNotification('tp', data);
+                        } else if (data.exit_reason === 'SL_HIT') {
+                            console.log('✅ Showing SL hit notification');
+                            showPositionNotification('sl', data);
+                        }
+                    } else {
+                        console.log('⏭️ Skipping notification - mode mismatch');
+                    }
+                    break;
+            }
         }
         
         // Trade Details Functions

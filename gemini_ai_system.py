@@ -26,8 +26,107 @@ sys.path.append('.')
 try:
     from crypto_bot_parallel import calculate_ema, calculate_rsi, calculate_atr, calculate_macd, get_klines
 except ImportError:
-    print("⚠️  Could not import technical analysis functions from main bot")
-    calculate_ema = calculate_rsi = calculate_atr = calculate_macd = get_klines = None
+    # Import technical analysis functions directly
+    try:
+        import pandas as pd
+        import numpy as np
+        import aiohttp
+        
+        def calculate_ema(data, period):
+            """Calculate Exponential Moving Average"""
+            if not data or len(data) < period:
+                return []
+            
+            df = pd.Series(data)
+            ema = df.ewm(span=period).mean()
+            return ema.tolist()
+        
+        def calculate_rsi(data, period=14):
+            """Calculate Relative Strength Index"""
+            if not data or len(data) < period + 1:
+                return []
+            
+            df = pd.Series(data)
+            delta = df.diff()
+            gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+            
+            rs = gain / loss
+            rsi = 100 - (100 / (1 + rs))
+            return rsi.fillna(50).tolist()
+        
+        def calculate_atr(high, low, close, period=14):
+            """Calculate Average True Range"""
+            if not high or not low or not close or len(close) < period:
+                return []
+            
+            high_series = pd.Series(high)
+            low_series = pd.Series(low)
+            close_series = pd.Series(close)
+            
+            tr1 = high_series - low_series
+            tr2 = abs(high_series - close_series.shift())
+            tr3 = abs(low_series - close_series.shift())
+            
+            tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+            atr = tr.rolling(window=period).mean()
+            return atr.fillna(0).tolist()
+        
+        def calculate_macd(data, fast=12, slow=26, signal=9):
+            """Calculate MACD"""
+            if not data or len(data) < slow:
+                return [], [], []
+            
+            df = pd.Series(data)
+            ema_fast = df.ewm(span=fast).mean()
+            ema_slow = df.ewm(span=slow).mean()
+            
+            macd_line = ema_fast - ema_slow
+            signal_line = macd_line.ewm(span=signal).mean()
+            histogram = macd_line - signal_line
+            
+            return macd_line.fillna(0).tolist(), signal_line.fillna(0).tolist(), histogram.fillna(0).tolist()
+        
+        async def get_klines(symbol, interval='1m', limit=100):
+            """Get klines data from Bybit"""
+            try:
+                url = "https://api.bybit.com/v5/market/kline"
+                params = {
+                    'category': 'linear',
+                    'symbol': symbol,
+                    'interval': interval,
+                    'limit': limit
+                }
+                
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(url, params=params, timeout=10) as response:
+                        if response.status == 200:
+                            data = await response.json()
+                            if data.get('retCode') == 0:
+                                klines = data.get('result', {}).get('list', [])
+                                # Convert to format: [timestamp, open, high, low, close, volume]
+                                formatted_klines = []
+                                for kline in reversed(klines):  # Bybit returns newest first
+                                    formatted_klines.append([
+                                        int(kline[0]),      # timestamp
+                                        float(kline[1]),    # open
+                                        float(kline[2]),    # high
+                                        float(kline[3]),    # low
+                                        float(kline[4]),    # close
+                                        float(kline[5])     # volume
+                                    ])
+                                return formatted_klines
+                return []
+            except Exception as e:
+                print(f"❌ Error getting klines for {symbol}: {e}")
+                return []
+        
+        print("✅ Using standalone technical analysis functions")
+        
+    except ImportError as e:
+        print(f"❌ Could not import required libraries for technical analysis: {e}")
+        print("   Please install: pip install pandas numpy aiohttp")
+        calculate_ema = calculate_rsi = calculate_atr = calculate_macd = get_klines = None
 
 # Load environment variables
 load_dotenv()
@@ -112,6 +211,12 @@ class GeminiMarketAnalyst:
                 'price_distance_from_level': signal_data.get('price_distance_from_level', 0)
             }
             
+            # Analyze indicators performance
+            # indicator_analysis = await self._get_indicator_analysis(signal_data['symbol'], signal_data['direction'])
+            
+            # Get market data analysis
+            market_analysis = await self._get_market_data_analysis(signal_data['symbol'], signal_data['direction'])
+            
             # Prepare prompt for entry reasoning
             prompt = f"""
             Analisis entry trading crypto ini dan berikan penjelasan detail:
@@ -127,6 +232,9 @@ class GeminiMarketAnalyst:
             
             INDIKATOR TEKNIKAL:
             {self._format_indicators(indicators)}
+            
+            ANALISIS MARKET DATA:
+            {market_analysis}
             
             DATA PASAR SAAT INI:
             {market_data}
@@ -144,6 +252,7 @@ class GeminiMarketAnalyst:
             - Gunakan HTML formatting untuk keterbacaan: <b>bold</b>, <i>italic</i>, <br> untuk line break
             - Format output dengan HTML tags yang akan ditampilkan dengan baik di dashboard
             - Contoh: <b>Alasan Entry:</b> Kondisi bullish terlihat dari...<br><br><b>Analisis Teknikal:</b> EMA menunjukkan...
+            - Fokus pada analisis real-time, bukan data historis
             """
             
             response = await self._generate_response(prompt)
@@ -153,90 +262,807 @@ class GeminiMarketAnalyst:
             print(f"❌ Error generating entry reasoning: {e}")
             return f"Analisis entry tidak tersedia karena error: {str(e)}"
     
-    async def generate_exit_reasoning(self, position_data: Dict, exit_reason: str) -> str:
-        """Generate AI reasoning for position exit in Indonesian"""
+    async def _get_indicator_analysis(self, symbol: str, direction: str) -> str:
+        """Get simple indicator analysis without database queries"""
         try:
-            # Get market data from entry to exit
-            market_journey = await self._get_market_journey(
-                position_data['symbol'],
-                position_data['entry_time'],
-                datetime.now()
-            )
+            # Simple analysis based on current market conditions only
+            analysis_text = f"ANALISIS INDIKATOR UNTUK {symbol} {direction}:\n\n"
+            analysis_text += f"📊 ANALISIS TEKNIKAL REAL-TIME:\n"
+            analysis_text += f"   - Symbol: {symbol}\n"
+            analysis_text += f"   - Direction: {direction}\n"
+            analysis_text += f"   - Analisis berdasarkan kondisi pasar saat ini\n"
+            analysis_text += f"   - Indikator teknikal menunjukkan sinyal {direction}\n\n"
             
-            # Prepare prompt for exit reasoning in Indonesian
+            return analysis_text
+            
+        except Exception as e:
+            print(f"❌ Error getting indicator analysis: {e}")
+            return f"Analisis indikator tidak tersedia: {str(e)}"
+    
+    async def _get_market_data_analysis(self, symbol: str, direction: str) -> str:
+        """Get simple market data analysis without database queries"""
+        try:
+            # Try to get current market data directly
+            try:
+                from market_data_system import get_market_data_system
+                market_system = get_market_data_system()
+                current_market_data = await market_system.get_market_data(symbol)
+                
+                if current_market_data and current_market_data.get('market_cap', 0) > 0:
+                    market_cap = current_market_data.get('market_cap', 0)
+                    volume_24h = current_market_data.get('total_volume_24h', 0)
+                    price_change_24h = current_market_data.get('price_change_percentage_24h', 0)
+                    
+                    # Categorize
+                    if market_cap > 5_000_000_000:
+                        mc_category = "🟢 BESAR"
+                    elif market_cap > 1_000_000_000:
+                        mc_category = "🟡 MENENGAH"
+                    else:
+                        mc_category = "🔴 KECIL"
+                    
+                    if volume_24h > 500_000_000:
+                        vol_category = "🟢 KOIN BESAR"
+                    elif volume_24h > 100_000_000:
+                        vol_category = "🟡 MENENGAH"
+                    else:
+                        vol_category = "🔴 KOIN KECIL"
+                    
+                    analysis_text = f"MARKET DATA REAL-TIME {symbol}:\n\n"
+                    analysis_text += f"📊 CURRENT METRICS:\n"
+                    analysis_text += f"   - Market Cap: ${market_cap:,.0f} {mc_category}\n"
+                    analysis_text += f"   - 24h Volume: ${volume_24h:,.0f} {vol_category}\n"
+                    analysis_text += f"   - 24h Change: {price_change_24h:.2f}%\n\n"
+                    
+                    # Risk assessment
+                    analysis_text += f"🚨 RISK ASSESSMENT:\n"
+                    if volume_24h < 100_000_000:
+                        analysis_text += f"   ⚠️ Low volume - potential slippage risk\n"
+                    if market_cap < 1_000_000_000:
+                        analysis_text += f"   ⚠️ Small market cap - higher volatility\n"
+                    if abs(price_change_24h) > 10:
+                        analysis_text += f"   ⚠️ High 24h volatility ({price_change_24h:.1f}%)\n"
+                    
+                    if volume_24h >= 100_000_000 and market_cap >= 1_000_000_000 and abs(price_change_24h) <= 10:
+                        analysis_text += f"   ✅ Market conditions appear favorable\n"
+                    
+                    return analysis_text
+                else:
+                    raise Exception("No market data available")
+                    
+            except Exception as e:
+                print(f"⚠️ Could not get market data: {e}")
+                # Fallback to simple analysis
+                analysis_text = f"MARKET ANALYSIS {symbol}:\n\n"
+                analysis_text += f"📊 BASIC ANALYSIS:\n"
+                analysis_text += f"   - Symbol: {symbol}\n"
+                analysis_text += f"   - Direction: {direction}\n"
+                analysis_text += f"   - Market data: Menggunakan analisis teknikal\n"
+                analysis_text += f"   - Risk level: Standard untuk crypto trading\n\n"
+                
+                return analysis_text
+            
+        except Exception as e:
+            print(f"❌ Error getting market data analysis: {e}")
+            return f"Market analysis: Berdasarkan kondisi pasar umum crypto"
+    
+    async def _get_stored_market_data_analysis(self, position_data: Dict) -> str:
+        """Get market data analysis using stored data from when position was opened"""
+        try:
+            analysis_text = f"MARKET DATA SAAT ENTRY {position_data['symbol']}:\n\n"
+            
+            # Extract stored market data from position_data if available
+            market_cap = position_data.get('market_cap', 0)
+            market_cap_category = position_data.get('market_cap_category', 'Unknown')
+            volume_category = position_data.get('volume_category', 'Unknown')
+            liquidity_score = position_data.get('liquidity_score', 0)
+            volatility_score = position_data.get('volatility_score', 0)
+            market_dominance = position_data.get('market_dominance', 0)
+            total_volume_24h = position_data.get('total_volume_24h', 0)
+            
+            if market_cap > 0:  # If we have stored market data
+                analysis_text += f"📊 MARKET CONDITIONS SAAT ENTRY:\n"
+                analysis_text += f"   - Market Cap: ${market_cap:,.0f} ({market_cap_category})\n"
+                analysis_text += f"   - 24h Volume: ${total_volume_24h:,.0f} ({volume_category})\n"
+                analysis_text += f"   - Liquidity Score: {liquidity_score:.1f}\n"
+                analysis_text += f"   - Volatility Score: {volatility_score:.1f}\n"
+                analysis_text += f"   - Market Dominance: {market_dominance:.1f}%\n\n"
+                
+                # Risk factors that were present at entry
+                analysis_text += f"🚨 KONDISI RISIKO SAAT ENTRY:\n"
+                
+                risk_factors = []
+                if volatility_score > 10.0:
+                    risk_factors.append("Very high volatility - risiko tinggi")
+                elif volatility_score > 5.0:
+                    risk_factors.append("High volatility - risiko sedang")
+                
+                if liquidity_score < 5.0:
+                    risk_factors.append("Low liquidity - potensi slippage")
+                elif liquidity_score < 10.0:
+                    risk_factors.append("Medium liquidity - perlu hati-hati")
+                
+                if market_cap_category in ['Micro Cap', 'Nano Cap']:
+                    risk_factors.append("Small market cap - risiko manipulasi tinggi")
+                elif market_cap_category == 'Small Cap':
+                    risk_factors.append("Small cap - volatilitas tinggi")
+                
+                if volume_category in ['Low Volume', 'Very Low Volume']:
+                    risk_factors.append("Low trading volume - sulit exit")
+                
+                if risk_factors:
+                    for factor in risk_factors:
+                        analysis_text += f"   ⚠️ {factor}\n"
+                else:
+                    analysis_text += f"   ✅ Kondisi market favorable saat entry\n"
+                
+                # Market category assessment
+                analysis_text += f"\n💡 ASSESSMENT KATEGORI:\n"
+                if market_cap_category == 'Large Cap':
+                    analysis_text += f"   - Large cap: Stabil, likuiditas tinggi, risiko rendah\n"
+                elif market_cap_category == 'Mid Cap':
+                    analysis_text += f"   - Mid cap: Balance risk-reward, volatilitas sedang\n"
+                elif market_cap_category == 'Small Cap':
+                    analysis_text += f"   - Small cap: High risk high reward, volatilitas tinggi\n"
+                else:
+                    analysis_text += f"   - {market_cap_category}: Risiko sangat tinggi, perlu extra hati-hati\n"
+                
+                if volume_category in ['Very High Volume', 'High Volume']:
+                    analysis_text += f"   - Volume tinggi: Mudah entry/exit, spread ketat\n"
+                elif volume_category == 'Medium Volume':
+                    analysis_text += f"   - Volume sedang: Cukup likuid untuk trading normal\n"
+                else:
+                    analysis_text += f"   - Volume rendah: Hati-hati dengan slippage dan exit\n"
+                
+            else:
+                analysis_text += f"📊 MARKET DATA: Tidak tersedia saat entry\n"
+                analysis_text += f"   (Data market cap dan volume tidak disimpan)\n\n"
+            
+            return analysis_text
+            
+        except Exception as e:
+            print(f"❌ Error getting stored market data analysis: {e}")
+            return f"Analisis market data tidak tersedia: {str(e)}"
+    
+    async def analyze_symbol_realtime(self, symbol: str, direction: str = None) -> str:
+        """
+        Analisis real-time untuk symbol tertentu
+        Menggunakan data market terkini dari API
+        """
+        try:
+            from ai_analysis_system_simple import get_realtime_market_analysis
+            
+            analysis = get_realtime_market_analysis(symbol)
+            
+            if not analysis.get('success'):
+                return f"Error dalam analisis real-time: {analysis.get('error', 'Unknown error')}"
+            
+            # Format analysis untuk AI response
             prompt = f"""
-            Analisis penutupan posisi trading crypto ini dan jelaskan apa yang terjadi:
+            Berikan analisis real-time untuk {symbol} dalam bahasa Indonesia:
             
-            DETAIL POSISI:
-            - Symbol: {position_data['symbol']}
-            - Arah: {position_data['direction']}
-            - Harga Entry: ${position_data['entry_price']:.6f}
-            - Harga Exit: ${position_data['exit_price']:.6f}
-            - Alasan Exit: {exit_reason}
-            - Durasi: {self._calculate_duration(position_data['entry_time'], datetime.now())}
-            - PnL: ${position_data.get('realized_pnl', 0):.2f} ({position_data.get('pnl_percentage', 0):.2f}%)
+            DATA MARKET SAAT INI:
+            - Market Cap: ${analysis['market_cap']:,.0f} ({analysis['market_cap_category']})
+            - Volume 24h: ${analysis['volume_24h']:,.0f} ({analysis['volume_category']})
+            - Liquidity Score: {analysis['liquidity_score']:.1f}
+            - Volatility Score: {analysis['volatility_score']:.1f}
+            - Market Dominance: {analysis['market_dominance']:.1f}%
             
-            PERJALANAN PASAR:
-            {market_journey}
+            PERFORMA HISTORIS:
+            {f"Total Trades: {analysis['historical_performance'].get('total_trades', 0)}, Win Rate: {analysis['historical_performance'].get('win_rate', 0):.1f}%" if analysis['historical_performance'] else "Belum ada data historis"}
             
-            INDIKATOR ENTRY AWAL:
-            {self._format_indicators(position_data.get('entry_indicators', {}))}
+            Berikan analisis komprehensif dalam format HTML dengan:
+            <b>1. Kondisi Market Saat Ini:</b> Jelaskan kondisi market cap, volume, dan volatilitas<br><br>
+            <b>2. Analisis Historis:</b> Bagaimana performa trading symbol ini sebelumnya<br><br>
+            <b>3. Assessment Risiko:</b> Tingkat risiko berdasarkan kondisi market saat ini<br><br>
+            <b>4. Rekomendasi Trading:</b> Apakah layak untuk trading dan strategi yang disarankan<br><br>
+            <b>5. Timing dan Entry:</b> Kapan waktu terbaik untuk entry dan exit
             
-            Berikan penjelasan dalam bahasa Indonesia yang mencakup:
-            
-            <b>Apa yang Terjadi:</b><br>
-            Jelaskan pergerakan pasar dari entry hingga exit dengan detail.<br><br>
-            
-            <b>Analisis Exit:</b><br>
-            Jelaskan mengapa posisi ditutup (TP/SL/manual) dan kondisi saat itu.<br><br>
-            
-            <b>Faktor Pasar:</b><br>
-            Sebutkan kondisi atau peristiwa kunci yang mempengaruhi hasil trade.<br><br>
-            
-            <b>Review Performa:</b><br>
-            Evaluasi apakah ini trade yang bagus dan apa yang bisa diperbaiki.<br><br>
-            
-            <b>Pelajaran Penting:</b><br>
-            Berikan insight penting untuk trade selanjutnya.
-            
-            PENTING: 
-            - Gunakan bahasa Indonesia yang natural dan mudah dipahami
-            - JANGAN gunakan format markdown (**, *, #, dll)
-            - WAJIB gunakan HTML formatting untuk keterbacaan: <b>bold</b>, <i>italic</i>, <br> untuk line break
-            - Format output dengan HTML tags yang akan ditampilkan dengan baik di dashboard
-            - Maksimal 250 kata
-            - Fokus pada analisis praktis dan edukatif
-            - CONTOH FORMAT YANG BENAR:
-            
-            <b>Apa yang Terjadi:</b><br>
-            Harga bergerak dari $3250.75 ke $3180.25 dalam waktu 18 menit...<br><br>
-            
-            <b>Analisis Exit:</b><br>
-            Posisi ditutup karena TP_HIT yang menunjukkan target profit tercapai...<br><br>
-            
-            <b>Faktor Pasar:</b><br>
-            RSI overbought memberikan sinyal yang tepat untuk entry SHORT...<br><br>
-            
-            GUNAKAN FORMAT HTML SEPERTI CONTOH DI ATAS!
-            
-            PENTING: 
-            - Gunakan bahasa Indonesia yang natural dan mudah dipahami
-            - JANGAN gunakan format markdown (**, *, #, dll)
-            - JANGAN gunakan bold, italic, atau formatting apapun
-            - Tulis dalam format paragraf biasa yang siap ditampilkan
-            - Maksimal 250 kata
-            - Fokus pada analisis praktis dan edukatif
-            - Output harus berupa teks plain tanpa formatting
+            Gunakan bahasa Indonesia yang jelas, maksimal 350 kata.
             """
             
             response = await self._generate_response(prompt)
             return response
             
         except Exception as e:
-            print(f"❌ Error generating exit reasoning: {e}")
-            return f"Analisis exit tidak tersedia karena error: {str(e)}"
+            print(f"❌ Error in realtime symbol analysis: {e}")
+            return f"Analisis real-time tidak tersedia: {str(e)}"
     
-    async def chat_with_market_data(self, user_question: str, context: Dict = None, trading_mode: str = "dry_run") -> str:
+    async def analyze_trade_history(self, symbol: str = None, trade_id: str = None, 
+                                  mode: str = "dry_run", limit: int = 5) -> str:
+        """
+        Analisis historical trades dengan data yang tersimpan
+        Menampilkan indikator dan kondisi market saat trade dibuka/ditutup
+        """
+        try:
+            from ai_analysis_system_simple import get_historical_trades_analysis, analyze_indicator_performance
+            
+            # Get trades analysis
+            if symbol:
+                trades_analysis = get_historical_trades_analysis(symbol, limit, mode)
+            else:
+                trades_analysis = get_historical_trades_analysis(None, limit, mode)
+            
+            if not trades_analysis or (len(trades_analysis) == 1 and 'error' in trades_analysis[0]):
+                return f"Tidak ada data historical trades yang ditemukan untuk {symbol or 'semua symbol'}"
+            
+            # Get indicator performance analysis
+            indicator_performance = analyze_indicator_performance(mode, 30)
+            
+            # Format analysis untuk AI response
+            trades_summary = []
+            
+            for trade in trades_analysis:
+                if 'error' in trade:
+                    continue
+                    
+                trade_summary = f"""
+                {trade['symbol']} {trade['direction']}:
+                - Result: {'PROFIT' if trade['is_profitable'] else 'LOSS'} {trade['pnl_percentage']:.2f}%
+                - Exit: {trade['exit_reason']}
+                - Pass Rate: {trade['pass_rate']:.1f}% ({trade['passed_indicators_count']}/{trade['passed_indicators_count'] + trade['failed_indicators_count']} indicators)
+                - Market: {trade['market_cap_category']} cap, {trade['volume_category']} volume
+                - Passed: {', '.join(trade['passed_indicators'][:3])}{'...' if len(trade['passed_indicators']) > 3 else ''}
+                - Failed: {', '.join(trade['failed_indicators'][:3])}{'...' if len(trade['failed_indicators']) > 3 else ''}
+                """
+                trades_summary.append(trade_summary)
+            
+            # Top performing indicators
+            top_indicators = ""
+            if indicator_performance.get('success') and indicator_performance['indicator_performance']:
+                top_3 = indicator_performance['indicator_performance'][:3]
+                top_indicators = f"""
+                TOP PERFORMING INDICATORS:
+                {chr(10).join([f"- {ind['indicator_name']}: {ind['effectiveness_score']:.1f} score ({ind['win_rate_when_passed']:.1f}% win rate when passed)" for ind in top_3])}
+                """
+            
+            prompt = f"""
+            Analisis historical trades berikut dalam bahasa Indonesia:
+            
+            MODE: {mode.upper()}
+            SYMBOL: {symbol or 'SEMUA SYMBOL'}
+            TOTAL TRADES ANALYZED: {len(trades_analysis)}
+            
+            DETAIL TRADES:
+            {''.join(trades_summary)}
+            
+            {top_indicators}
+            
+            Berikan analisis mendalam dalam format HTML dengan:
+            <b>1. Overview Performa:</b> Ringkasan hasil trading secara keseluruhan<br><br>
+            <b>2. Analisis Indikator:</b> Indikator mana yang paling sering berhasil dan gagal<br><br>
+            <b>3. Kondisi Market Optimal:</b> Pada kondisi market seperti apa trading paling berhasil<br><br>
+            <b>4. Pattern Recognition:</b> Pola-pola yang terlihat dari data historis<br><br>
+            <b>5. Rekomendasi Perbaikan:</b> Saran untuk meningkatkan performa trading
+            
+            Fokus pada insight praktis yang bisa digunakan untuk trading selanjutnya.
+            Gunakan bahasa Indonesia yang jelas, maksimal 400 kata.
+            """
+            
+            response = await self._generate_response(prompt)
+            return response
+            
+        except Exception as e:
+            print(f"❌ Error in trade history analysis: {e}")
+            return f"Analisis historical trades tidak tersedia: {str(e)}"
+    
+    async def analyze_open_positions(self, symbol: str = None, position_id: str = None, 
+                                   mode: str = "dry_run") -> str:
+        """
+        Analisis posisi yang masih terbuka dengan data saat dibuka
+        """
+        try:
+            from ai_analysis_system_simple import get_open_positions_analysis
+            
+            positions_analysis = get_open_positions_analysis(symbol, mode)
+            
+            if not positions_analysis or (len(positions_analysis) == 1 and 'error' in positions_analysis[0]):
+                return f"Tidak ada posisi terbuka yang ditemukan untuk {symbol or 'semua symbol'}"
+            
+            # Format analysis untuk AI response
+            positions_summary = []
+            
+            for position in positions_analysis:
+                if 'error' in position:
+                    continue
+                    
+                position_summary = f"""
+                {position['symbol']} {position['direction']}:
+                - Current PnL: {position['pnl_percentage']:.2f}%
+                - Entry: ${position['entry_price']:.4f}, Current: ${position['current_price']:.4f}
+                - Pass Rate: {position['pass_rate']:.1f}% ({position['passed_indicators_count']}/{position['passed_indicators_count'] + position['failed_indicators_count']} indicators)
+                - Market saat Entry: {position['market_cap_category']} cap, {position['volume_category']} volume
+                - Passed: {', '.join(position['passed_indicators'][:3])}{'...' if len(position['passed_indicators']) > 3 else ''}
+                - Failed: {', '.join(position['failed_indicators'][:3])}{'...' if len(position['failed_indicators']) > 3 else ''}
+                """
+                positions_summary.append(position_summary)
+            
+            prompt = f"""
+            Analisis posisi terbuka berikut dalam bahasa Indonesia:
+            
+            MODE: {mode.upper()}
+            SYMBOL: {symbol or 'SEMUA SYMBOL'}
+            TOTAL POSITIONS: {len(positions_analysis)}
+            
+            DETAIL POSITIONS:
+            {''.join(positions_summary)}
+            
+            Berikan analisis mendalam dalam format HTML dengan:
+            <b>1. Status Posisi:</b> Kondisi current dari setiap posisi (profit/loss, durasi)<br><br>
+            <b>2. Kualitas Entry:</b> Seberapa baik kondisi saat entry (indikator, market conditions)<br><br>
+            <b>3. Risk Assessment:</b> Tingkat risiko current dan faktor-faktor yang mempengaruhi<br><br>
+            <b>4. Action Plan:</b> Apa yang harus dilakukan untuk setiap posisi (hold, close, adjust SL/TP)<br><br>
+            <b>5. Learning Points:</b> Pelajaran dari posisi ini untuk trading selanjutnya
+            
+            Berikan rekomendasi spesifik dan actionable untuk setiap posisi.
+            Gunakan bahasa Indonesia yang jelas, maksimal 400 kata.
+            """
+            
+            response = await self._generate_response(prompt)
+            return response
+            
+        except Exception as e:
+            print(f"❌ Error in open positions analysis: {e}")
+            return f"Analisis posisi terbuka tidak tersedia: {str(e)}"
+    
+    async def generate_exit_reasoning(self, position_data: Dict, exit_reason: str) -> str:
+        """Generate comprehensive AI reasoning for position exit in Indonesian"""
+        try:
+            # Extract position data
+            symbol = position_data['symbol']
+            direction = position_data['direction']
+            entry_price = position_data['entry_price']
+            exit_price = position_data['exit_price']
+            pnl = position_data.get('realized_pnl', 0)
+            pnl_percentage = position_data.get('pnl_percentage', 0)
+            entry_time = position_data['entry_time']
+            entry_indicators = position_data.get('entry_indicators', {})
+            
+            # Calculate price movement
+            price_change = ((exit_price - entry_price) / entry_price) * 100
+            if direction == 'SHORT':
+                price_change = -price_change
+            
+            # Duration calculation
+            duration = self._calculate_duration(entry_time, datetime.now())
+            
+            # Exit reason explanation
+            exit_explanations = {
+                'TP_HIT': 'Target Profit tercapai',
+                'SL_HIT': 'Stop Loss terpicu',
+                'MANUAL': 'Penutupan manual',
+                'TIMEOUT': 'Timeout otomatis',
+                'ERROR': 'Error sistem'
+            }
+            exit_desc = exit_explanations.get(exit_reason, exit_reason)
+            
+            # Get comprehensive market analysis
+            market_analysis = await self._get_comprehensive_market_analysis(symbol, entry_time)
+            
+            # Analyze indicators at entry vs current
+            indicator_analysis = self._analyze_indicator_changes(entry_indicators, symbol)
+            
+            # Get current technical indicators
+            current_technical = await self._get_current_technical_analysis(symbol)
+            
+            # Generate comprehensive reasoning
+            prompt = f"""
+            Analisis mendalam penutupan posisi trading ini dalam bahasa Indonesia:
+            
+            DETAIL POSISI:
+            - Symbol: {symbol}
+            - Arah: {direction}
+            - Entry: ${entry_price:.6f}
+            - Exit: ${exit_price:.6f}
+            - Alasan: {exit_desc}
+            - Durasi: {duration}
+            - PnL: ${pnl:.2f} ({pnl_percentage:.2f}%)
+            - Pergerakan Harga: {price_change:.2f}%
+            
+            WAJIB GUNAKAN DATA BERIKUT DALAM ANALISIS:
+            
+            {market_analysis}
+            
+            {indicator_analysis}
+            
+            {current_technical}
+            
+            Berikan analisis komprehensif dalam format HTML yang WAJIB mencakup data di atas:
+            
+            <b>📊 Ringkasan Eksekusi:</b><br>
+            Jelaskan secara detail hasil trade {symbol} {direction} yang ditutup dengan {exit_desc}. Analisis pergerakan harga {price_change:.2f}% dan dampaknya terhadap PnL {pnl_percentage:.2f}%. WAJIB sebutkan data perubahan 24h dan volume dari data market yang diberikan.<br><br>
+            
+            <b>📈 Analisis Perubahan Market:</b><br>
+            WAJIB gunakan data market yang diberikan di atas. Bandingkan kondisi market saat entry vs exit. Sebutkan secara spesifik perubahan 24h, volume, open interest, dan funding rate. Bagaimana perubahan ini mempengaruhi hasil trade?<br><br>
+            
+            <b>🔍 Evaluasi Indikator Teknikal:</b><br>
+            WAJIB gunakan data indikator yang diberikan. Analisis perubahan indikator dari saat entry hingga exit. Bagaimana EMA, RSI, MACD, dan indikator lainnya berubah? Apakah sinyal entry masih valid?<br><br>
+            
+            <b>⚡ Faktor Volatilitas dan Timing:</b><br>
+            WAJIB gunakan data volatilitas dari analisis teknikal. Evaluasi tingkat volatilitas selama posisi terbuka. Bagaimana volatilitas dan timing mempengaruhi hasil?<br><br>
+            
+            <b>🎯 Analisis Risk Management:</b><br>
+            Evaluasi efektivitas TP/SL berdasarkan kondisi market yang sebenarnya. WAJIB sebutkan data funding rate dan open interest dalam analisis.<br><br>
+            
+            <b>💡 Insight dan Rekomendasi:</b><br>
+            Berikan insight mendalam berdasarkan SEMUA data yang diberikan di atas. Apa pelajaran dari kondisi market spesifik ini?
+            
+            PENTING:
+            - WAJIB gunakan SEMUA data market, indikator, dan teknikal yang diberikan
+            - Sebutkan angka-angka spesifik dari data (perubahan 24h, volume, dll)
+            - Berikan analisis yang sangat detail dan komprehensif (500-600 kata)
+            - Gunakan HTML formatting: <b>bold</b>, <br> untuk line break
+            - Bahasa Indonesia yang profesional dan analitis
+            - JANGAN gunakan format markdown atau code blocks
+            - Langsung mulai dengan konten HTML, tanpa pembuka apapun
+            """
+            
+            response = await self._generate_response(prompt)
+            
+            # Clean up any unwanted formatting
+            if response.startswith('```html'):
+                response = response.replace('```html', '').replace('```', '').strip()
+            if response.startswith('<html>'):
+                response = response.replace('<html>', '').strip()
+            if response.endswith('</html>'):
+                response = response.replace('</html>', '').strip()
+            
+            # Remove leading <br> tags and whitespace
+            response = response.strip()
+            while response.startswith('<br>') or response.startswith('<br/>') or response.startswith('<br />') or response.startswith('<p>'):
+                if response.startswith('<br>'):
+                    response = response[4:].strip()
+                elif response.startswith('<br/>'):
+                    response = response[5:].strip()
+                elif response.startswith('<br />'):
+                    response = response[6:].strip()
+                elif response.startswith('<p>'):
+                    response = response[3:].strip()
+            
+            # Remove trailing </p> tags
+            while response.endswith('</p>'):
+                response = response[:-4].strip()
+            
+            # Ensure it starts with proper HTML
+            if not response.startswith('<b>'):
+                # If it doesn't start with <b>, it might be malformed
+                print(f"⚠️ AI response doesn't start with <b>, fixing format...")
+                if '<b>' in response:
+                    # Find the first <b> tag and start from there
+                    start_idx = response.find('<b>')
+                    response = response[start_idx:]
+            
+            return response
+            
+        except Exception as e:
+            print(f"❌ Error generating comprehensive exit reasoning: {e}")
+            import traceback
+            traceback.print_exc()
+            
+            # CRITICAL: AI MUST WORK - No fallback allowed per user requirement
+            print(f"🔄 CRITICAL: Retrying AI analysis for {position_data.get('symbol', 'N/A')} - AI is MANDATORY")
+            
+            # Try with different model parameters
+            try:
+                # Retry with more aggressive settings
+                simple_prompt = f"""
+                WAJIB analisis mendalam penutupan posisi {position_data.get('symbol', 'N/A')} {position_data.get('direction', 'N/A')}:
+                
+                DETAIL POSISI:
+                - Entry: ${position_data.get('entry_price', 0):.6f}
+                - Exit: ${position_data.get('exit_price', 0):.6f}  
+                - PnL: ${position_data.get('realized_pnl', 0):.2f} ({position_data.get('pnl_percentage', 0):.2f}%)
+                - Alasan: {exit_reason}
+                
+                WAJIB berikan analisis komprehensif dalam format HTML:
+                
+                <b>📊 Ringkasan Eksekusi:</b><br>
+                Analisis detail hasil trade {position_data.get('symbol', 'N/A')} {position_data.get('direction', 'N/A')} dengan PnL {position_data.get('pnl_percentage', 0):.2f}%. Jelaskan pergerakan harga dan dampak terhadap hasil trading.<br><br>
+                
+                <b>📈 Analisis Perubahan Market:</b><br>
+                Evaluasi kondisi market saat exit, termasuk volume, volatilitas, dan faktor fundamental yang mempengaruhi pergerakan harga selama posisi terbuka.<br><br>
+                
+                <b>🔍 Evaluasi Indikator Teknikal:</b><br>
+                Analisis indikator teknikal (RSI, EMA, MACD) dari saat entry hingga exit. Bagaimana perubahan sinyal mempengaruhi hasil trade.<br><br>
+                
+                <b>⚡ Faktor Volatilitas dan Timing:</b><br>
+                Evaluasi tingkat volatilitas dan timing exit. Apakah exit dilakukan pada momentum yang tepat berdasarkan kondisi market.<br><br>
+                
+                <b>🎯 Analisis Risk Management:</b><br>
+                Evaluasi efektivitas strategi TP/SL dan manajemen risiko berdasarkan hasil aktual trade ini.<br><br>
+                
+                <b>💡 Insight dan Rekomendasi:</b><br>
+                Insight mendalam dan rekomendasi spesifik untuk trading selanjutnya berdasarkan pembelajaran dari trade ini.
+                
+                PENTING: Gunakan bahasa Indonesia, format HTML, minimal 400 kata, analisis yang sangat detail.
+                """
+                
+                retry_response = await self._generate_response(simple_prompt)
+                
+                # Clean up formatting
+                if retry_response.startswith('```html'):
+                    retry_response = retry_response.replace('```html', '').replace('```', '').strip()
+                if retry_response.startswith('<html>'):
+                    retry_response = retry_response.replace('<html>', '').strip()
+                if retry_response.endswith('</html>'):
+                    retry_response = retry_response.replace('</html>', '').strip()
+                
+                # Remove leading <br> tags and whitespace
+                retry_response = retry_response.strip()
+                while retry_response.startswith('<br>') or retry_response.startswith('<br/>') or retry_response.startswith('<br />') or retry_response.startswith('<p>'):
+                    if retry_response.startswith('<br>'):
+                        retry_response = retry_response[4:].strip()
+                    elif retry_response.startswith('<br/>'):
+                        retry_response = retry_response[5:].strip()
+                    elif retry_response.startswith('<br />'):
+                        retry_response = retry_response[6:].strip()
+                    elif retry_response.startswith('<p>'):
+                        retry_response = retry_response[3:].strip()
+                
+                # Remove trailing </p> tags
+                while retry_response.endswith('</p>'):
+                    retry_response = retry_response[:-4].strip()
+                
+                # Ensure it starts with proper HTML
+                if not retry_response.startswith('<b>'):
+                    print(f"⚠️ Retry response doesn't start with <b>, fixing format...")
+                    if '<b>' in retry_response:
+                        start_idx = retry_response.find('<b>')
+                        retry_response = retry_response[start_idx:]
+                
+                print(f"✅ AI retry successful for {position_data.get('symbol', 'N/A')}")
+                return retry_response
+                
+            except Exception as retry_error:
+                print(f"❌ AI retry failed: {retry_error}")
+                
+                # LAST RESORT: Force reinitialize AI and try once more
+                try:
+                    print(f"🔄 LAST RESORT: Reinitializing AI for {position_data.get('symbol', 'N/A')}")
+                    
+                    # Force reinitialize Gemini
+                    from gemini_ai_system import GeminiMarketAnalyst
+                    new_analyst = GeminiMarketAnalyst()
+                    
+                    final_response = await new_analyst._generate_response(simple_prompt)
+                    
+                    # Clean formatting
+                    final_response = final_response.strip()
+                    if final_response.startswith('```html'):
+                        final_response = final_response.replace('```html', '').replace('```', '').strip()
+                    
+                    # Remove leading <br> tags
+                    while final_response.startswith('<br>') or final_response.startswith('<br/>'):
+                        if final_response.startswith('<br>'):
+                            final_response = final_response[4:].strip()
+                        elif final_response.startswith('<br/>'):
+                            final_response = final_response[5:].strip()
+                    
+                    if '<b>' in final_response and not final_response.startswith('<b>'):
+                        start_idx = final_response.find('<b>')
+                        final_response = final_response[start_idx:]
+                    
+                    print(f"✅ AI LAST RESORT successful for {position_data.get('symbol', 'N/A')}")
+                    return final_response
+                    
+                except Exception as final_error:
+                    print(f"❌ CRITICAL: All AI attempts failed for {position_data.get('symbol', 'N/A')}: {final_error}")
+                    
+                    # CRITICAL: AI IS MANDATORY - Raise exception to stop system
+                    raise Exception(f"CRITICAL FAILURE: AI exit reasoning is MANDATORY but completely failed for {position_data.get('symbol', 'N/A')}. System must be fixed before continuing. Error: {final_error}")
+    
+    async def _get_comprehensive_market_analysis(self, symbol: str, entry_time: str) -> str:
+        """Get comprehensive market analysis comparing entry vs current conditions"""
+        try:
+            # Get current market data from Bybit API
+            ticker_response = self.session.get_tickers(category="linear", symbol=symbol)
+            if ticker_response['retCode'] != 0 or not ticker_response['result']['list']:
+                return "Data market tidak tersedia untuk analisis perbandingan"
+            
+            ticker = ticker_response['result']['list'][0]
+            current_price = float(ticker['lastPrice'])
+            current_change_24h = float(ticker.get('price24hPcnt', 0)) * 100
+            current_volume_24h = float(ticker.get('volume24h', 0))
+            current_turnover_24h = float(ticker.get('turnover24h', 0))
+            open_interest = float(ticker.get('openInterest', 0))
+            
+            # Get funding rate
+            funding_response = self.session.get_funding_rate_history(category="linear", symbol=symbol, limit=1)
+            funding_rate = 0
+            if funding_response['retCode'] == 0 and funding_response['result']['list']:
+                funding_rate = float(funding_response['result']['list'][0]['fundingRate']) * 100
+            
+            # Calculate time since entry
+            from datetime import datetime
+            try:
+                entry_dt = datetime.fromisoformat(entry_time.replace('Z', '+00:00'))
+                time_diff = datetime.now() - entry_dt
+                hours_since_entry = time_diff.total_seconds() / 3600
+            except:
+                hours_since_entry = 0
+            
+            # Get volatility data from recent klines
+            klines_response = self.session.get_kline(category="linear", symbol=symbol, interval="15", limit=20)
+            volatility_analysis = "Volatilitas normal"
+            price_trend_analysis = "Trend tidak dapat ditentukan"
+            
+            if klines_response['retCode'] == 0 and klines_response['result']['list']:
+                klines = klines_response['result']['list']
+                highs = [float(k[2]) for k in klines]
+                lows = [float(k[3]) for k in klines]
+                closes = [float(k[4]) for k in klines]
+                
+                # Calculate average true range for volatility
+                ranges = [(h - l) / c * 100 for h, l, c in zip(highs, lows, closes) if c > 0]
+                avg_volatility = sum(ranges) / len(ranges) if ranges else 0
+                
+                if avg_volatility > 3.0:
+                    volatility_analysis = f"Volatilitas tinggi ({avg_volatility:.2f}% avg range)"
+                elif avg_volatility > 1.5:
+                    volatility_analysis = f"Volatilitas sedang ({avg_volatility:.2f}% avg range)"
+                else:
+                    volatility_analysis = f"Volatilitas rendah ({avg_volatility:.2f}% avg range)"
+                
+                # Calculate price trend from klines
+                if len(closes) >= 2:
+                    recent_change = ((closes[-1] - closes[0]) / closes[0]) * 100
+                    if recent_change > 1.0:
+                        price_trend_analysis = f"Trend naik dalam 5 jam terakhir (+{recent_change:.2f}%)"
+                    elif recent_change < -1.0:
+                        price_trend_analysis = f"Trend turun dalam 5 jam terakhir ({recent_change:.2f}%)"
+                    else:
+                        price_trend_analysis = f"Sideways dalam 5 jam terakhir ({recent_change:+.2f}%)"
+            
+            # Alternative 24h change calculation if API returns 0
+            if abs(current_change_24h) < 0.01:  # If 24h change is essentially 0
+                try:
+                    # Get 24h klines to calculate manually
+                    klines_24h = self.session.get_kline(category="linear", symbol=symbol, interval="1h", limit=24)
+                    if klines_24h['retCode'] == 0 and klines_24h['result']['list']:
+                        klines_data = klines_24h['result']['list']
+                        if len(klines_data) >= 2:
+                            price_24h_ago = float(klines_data[0][4])  # Close price 24h ago
+                            manual_change_24h = ((current_price - price_24h_ago) / price_24h_ago) * 100
+                            current_change_24h = manual_change_24h
+                except Exception as e:
+                    pass  # Silent fallback
+            
+            analysis = f"""PERBANDINGAN KONDISI MARKET:
+            
+📊 KONDISI SAAT INI:
+   - Harga: ${current_price:.6f}
+   - Perubahan 24h: {current_change_24h:.2f}%
+   - Volume 24h: ${current_volume_24h:,.0f}
+   - Turnover 24h: ${current_turnover_24h:,.0f}
+   - Open Interest: {open_interest:,.0f}
+   - Funding Rate: {funding_rate:.4f}%
+   - {volatility_analysis}
+   - {price_trend_analysis}
+   
+⏰ WAKTU SEJAK ENTRY:
+   - Durasi: {hours_since_entry:.1f} jam
+   - Perubahan market dalam periode ini
+   
+💹 ANALISIS PERUBAHAN:
+   - Volume trend: {'Meningkat' if current_volume_24h > 50000000 else 'Normal' if current_volume_24h > 10000000 else 'Rendah'}
+   - OI trend: {'Tinggi' if open_interest > 100000000 else 'Sedang' if open_interest > 50000000 else 'Rendah'}
+   - Market sentiment: {'Bullish' if current_change_24h > 2 else 'Bearish' if current_change_24h < -2 else 'Sideways'}
+   - Funding bias: {'Long-heavy' if funding_rate > 0.01 else 'Short-heavy' if funding_rate < -0.01 else 'Balanced'}"""
+            
+            return analysis
+            
+        except Exception as e:
+            print(f"⚠️ Error in comprehensive market analysis: {e}")
+            return "Analisis market komprehensif tidak tersedia"
+    
+    def _analyze_indicator_changes(self, entry_indicators: Dict, symbol: str) -> str:
+        """Analyze how indicators have changed since entry"""
+        try:
+            if not entry_indicators:
+                return "Data indikator saat entry tidak tersedia"
+            
+            analysis = f"""PERUBAHAN INDIKATOR SEJAK ENTRY:
+            
+📈 INDIKATOR SAAT ENTRY:
+   - EMA Fast > Slow: {'✅' if entry_indicators.get('ema_fast_above_slow') else '❌'}
+   - RSI Oversold: {'✅' if entry_indicators.get('rsi_oversold') else '❌'}
+   - RSI Overbought: {'✅' if entry_indicators.get('rsi_overbought') else '❌'}
+   - MACD Bullish: {'✅' if entry_indicators.get('macd_bullish') else '❌'}
+   - Volume Confirmation: {'✅' if entry_indicators.get('volume_confirmation') else '❌'}
+   - Volatility Confirmation: {'✅' if entry_indicators.get('volatility_confirmation') else '❌'}
+   - Trend Alignment: {'✅' if entry_indicators.get('trend_alignment') else '❌'}
+   
+🔄 VALIDITAS SINYAL:
+   - Total indikator positif saat entry: {sum(1 for v in entry_indicators.values() if v)}
+   - Kekuatan sinyal: {'Kuat' if sum(1 for v in entry_indicators.values() if v) >= 4 else 'Sedang' if sum(1 for v in entry_indicators.values() if v) >= 2 else 'Lemah'}
+   
+⚠️ PERUBAHAN KONDISI:
+   - Indikator mungkin sudah berubah sejak entry
+   - Perlu evaluasi ulang kondisi teknikal saat ini"""
+            
+            return analysis
+            
+        except Exception as e:
+            print(f"⚠️ Error analyzing indicator changes: {e}")
+            return "Analisis perubahan indikator tidak tersedia"
+    
+    async def _get_current_technical_analysis(self, symbol: str) -> str:
+        """Get current technical analysis"""
+        try:
+            # Get recent klines for technical analysis
+            klines_response = self.session.get_kline(category="linear", symbol=symbol, interval="15", limit=50)
+            if klines_response['retCode'] != 0 or not klines_response['result']['list']:
+                return "Analisis teknikal saat ini tidak tersedia"
+            
+            klines = klines_response['result']['list']
+            closes = [float(k[4]) for k in klines]
+            highs = [float(k[2]) for k in klines]
+            lows = [float(k[3]) for k in klines]
+            volumes = [float(k[5]) for k in klines]
+            
+            if len(closes) < 26:
+                return "Data tidak cukup untuk analisis teknikal"
+            
+            # Calculate current indicators
+            current_price = closes[-1]
+            
+            # Simple EMA calculation
+            ema_fast = sum(closes[-5:]) / 5 if len(closes) >= 5 else current_price
+            ema_slow = sum(closes[-13:]) / 13 if len(closes) >= 13 else current_price
+            ema_trend = "Bullish" if ema_fast > ema_slow else "Bearish"
+            
+            # Simple RSI calculation
+            gains = []
+            losses = []
+            for i in range(1, min(15, len(closes))):
+                change = closes[-i] - closes[-i-1]
+                if change > 0:
+                    gains.append(change)
+                    losses.append(0)
+                else:
+                    gains.append(0)
+                    losses.append(abs(change))
+            
+            avg_gain = sum(gains) / len(gains) if gains else 0
+            avg_loss = sum(losses) / len(losses) if losses else 0.001
+            rs = avg_gain / avg_loss if avg_loss > 0 else 0
+            rsi = 100 - (100 / (1 + rs))
+            
+            rsi_condition = "Overbought" if rsi > 70 else "Oversold" if rsi < 30 else "Neutral"
+            
+            # Volume analysis
+            avg_volume = sum(volumes[-10:]) / 10 if len(volumes) >= 10 else volumes[-1]
+            current_volume = volumes[-1]
+            volume_trend = "Tinggi" if current_volume > avg_volume * 1.2 else "Rendah" if current_volume < avg_volume * 0.8 else "Normal"
+            
+            # Price action analysis
+            recent_high = max(highs[-10:]) if len(highs) >= 10 else current_price
+            recent_low = min(lows[-10:]) if len(lows) >= 10 else current_price
+            price_position = ((current_price - recent_low) / (recent_high - recent_low)) * 100 if recent_high != recent_low else 50
+            
+            analysis = f"""KONDISI TEKNIKAL SAAT INI:
+            
+📊 INDIKATOR UTAMA:
+   - EMA Trend: {ema_trend} (Fast: ${ema_fast:.6f}, Slow: ${ema_slow:.6f})
+   - RSI: {rsi:.1f} ({rsi_condition})
+   - Volume: {volume_trend} vs rata-rata
+   - Price Position: {price_position:.1f}% dari range recent
+   
+📈 MOMENTUM:
+   - Trend direction: {ema_trend}
+   - Momentum strength: {'Strong' if abs(ema_fast - ema_slow) / current_price > 0.01 else 'Weak'}
+   - Volume support: {'Yes' if volume_trend == 'Tinggi' else 'No'}
+   
+🎯 LEVEL KRITIS:
+   - Recent High: ${recent_high:.6f}
+   - Recent Low: ${recent_low:.6f}
+   - Current: ${current_price:.6f}"""
+            
+            return analysis
+            
+        except Exception as e:
+            print(f"⚠️ Error in current technical analysis: {e}")
+            return "Analisis teknikal saat ini tidak tersedia"
         """Interactive chat with real market data access and trading system data
         
         Args:
@@ -377,7 +1203,7 @@ class GeminiMarketAnalyst:
     
     async def _generate_response(self, prompt: str, retry_count: int = 0) -> str:
         """Generate response using Gemini AI with automatic API key rotation on rate limits"""
-        max_retries = len(self.api_keys)
+        max_retries = len(self.api_keys) * 2  # Allow multiple retries per key
         
         try:
             response = await asyncio.to_thread(
@@ -390,7 +1216,11 @@ class GeminiMarketAnalyst:
                     top_k=40
                 )
             )
-            return response.text
+            
+            if response and response.text:
+                return response.text
+            else:
+                raise Exception("Empty response from Gemini API")
             
         except Exception as e:
             error_str = str(e).lower()
@@ -401,18 +1231,34 @@ class GeminiMarketAnalyst:
                 self._rotate_api_key()
                 
                 # Wait a bit before retrying
-                await asyncio.sleep(1)
+                await asyncio.sleep(2)
                 
                 # Retry with next API key
                 return await self._generate_response(prompt, retry_count + 1)
+            
+            # Check if it's a safety/content filter error
+            elif ('safety' in error_str or 'blocked' in error_str or 'filter' in error_str) and retry_count < max_retries:
+                print(f"⚠️  Content filtered, trying with modified prompt...")
+                
+                # Simplify prompt to avoid content filters
+                simplified_prompt = f"""
+                Analisis trading dalam bahasa Indonesia:
+                
+                {prompt.split('DETAIL POSISI:')[1].split('WAJIB GUNAKAN')[0] if 'DETAIL POSISI:' in prompt else prompt[:500]}
+                
+                Berikan analisis singkat dalam format HTML dengan <b>bold</b> dan <br> untuk line break.
+                Fokus pada analisis teknikal dan market condition.
+                """
+                
+                return await self._generate_response(simplified_prompt, retry_count + 1)
             
             # If not a rate limit error or max retries reached
             print(f"❌ Gemini API error ({self._get_current_api_key_info()}): {e}")
             
             if retry_count >= max_retries:
-                return f"AI response unavailable: All API keys exhausted. Error: {str(e)}"
+                raise Exception(f"All API keys exhausted after {max_retries} attempts. Last error: {str(e)}")
             else:
-                return f"AI response unavailable: {str(e)}"
+                raise Exception(f"Gemini API error: {str(e)}")
     
     async def _get_market_context(self, symbol: str) -> str:
         """Get current market context for a symbol"""
@@ -1366,19 +2212,118 @@ ANALISIS:
             
         except Exception as e:
             return f"Error ringkasan teknikal: {str(e)}"
+    
+    async def chat_with_market_data(self, user_question: str, context: Dict = None, trading_mode: str = "dry_run") -> str:
+        """Interactive chat with real market data access and trading system data
+        
+        Args:
+            user_question: User's question
+            context: Additional context (symbol, etc.)
+            trading_mode: "dry_run" or "real_trading" to determine which data to access
+        """
+        try:
+            # Get trading system data based on mode
+            if trading_mode == "dry_run":
+                from dry_run_system import dry_run_system
+                open_positions = dry_run_system.get_open_positions()
+                recent_trades = dry_run_system.get_trade_history(10)
+            else:
+                from real_trade_system import real_trade_system
+                open_positions = real_trade_system.get_open_positions()
+                recent_trades = real_trade_system.get_trade_history(10)
+            
+            # Prepare trading context
+            trading_context = f"""
+            TRADING SYSTEM DATA ({trading_mode.upper()}):
+            
+            📊 Open Positions: {len(open_positions)}
+            {chr(10).join([f"   - {pos['symbol']} {pos['direction']} @ ${pos['entry_price']:.6f} | PnL: {pos.get('unrealized_pnl', 0):.2f}" for pos in open_positions[:5]])}
+            
+            📈 Recent Trades: {len(recent_trades)}
+            {chr(10).join([f"   - {trade['symbol']} {trade['direction']} | PnL: {trade.get('pnl_percentage', 0):.2f}% | {trade.get('exit_reason', 'N/A')}" for trade in recent_trades[:5]])}
+            """
+            
+            # Add symbol-specific context if provided
+            symbol_context = ""
+            if context and context.get('symbol'):
+                symbol = context['symbol']
+                try:
+                    market_data = await self._get_market_context(symbol)
+                    symbol_context = f"\nSYMBOL CONTEXT ({symbol}):\n{market_data}"
+                except:
+                    symbol_context = f"\nSYMBOL: {symbol} (market data unavailable)"
+            
+            # Generate response
+            prompt = f"""
+            Jawab pertanyaan user tentang trading dan market dalam bahasa Indonesia:
+            
+            PERTANYAAN USER: {user_question}
+            
+            {trading_context}
+            {symbol_context}
+            
+            Berikan jawaban yang:
+            - Menggunakan data trading system yang tersedia
+            - Memberikan insight praktis dan actionable
+            - Menjelaskan kondisi market saat ini
+            - Memberikan rekomendasi berdasarkan data
+            - Menggunakan bahasa Indonesia yang jelas
+            - Format HTML untuk readability: <b>bold</b>, <br> untuk line break
+            """
+            
+            response = await self._generate_response(prompt)
+            return response
+            
+        except Exception as e:
+            print(f"❌ Error in chat with market data: {e}")
+            return f"Maaf, terjadi error dalam mengakses data market: {str(e)}"
 
 # Global instance
 gemini_analyst = None
 
 def get_gemini_analyst():
-    """Get or create Gemini analyst instance"""
+    """Get or create Gemini analyst instance with robust error handling"""
     global gemini_analyst
-    if gemini_analyst is None:
+    
+    # If instance exists and is working, return it
+    if gemini_analyst is not None:
         try:
+            # Test if the instance is still working
+            if hasattr(gemini_analyst, 'api_keys') and gemini_analyst.api_keys:
+                return gemini_analyst
+        except:
+            # Instance is corrupted, reset it
+            gemini_analyst = None
+    
+    # Create new instance with retry mechanism
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            print(f"🤖 Initializing Gemini AI (attempt {attempt + 1}/{max_retries})...")
             gemini_analyst = GeminiMarketAnalyst()
+            
+            # Verify initialization was successful
+            if gemini_analyst and hasattr(gemini_analyst, 'api_keys') and gemini_analyst.api_keys:
+                print(f"✅ Gemini AI initialized successfully with {len(gemini_analyst.api_keys)} API keys")
+                return gemini_analyst
+            else:
+                raise Exception("Gemini analyst created but API keys not found")
+                
         except Exception as e:
-            print(f"❌ Failed to initialize Gemini AI: {e}")
-            return None
+            print(f"❌ Failed to initialize Gemini AI (attempt {attempt + 1}): {e}")
+            gemini_analyst = None
+            
+            if attempt < max_retries - 1:
+                import time
+                time.sleep(1)  # Wait before retry
+            else:
+                print("❌ CRITICAL: All attempts to initialize Gemini AI failed!")
+                print("🔧 Please check:")
+                print("   - GEMINI_API_KEYS environment variable")
+                print("   - Internet connection")
+                print("   - API key validity")
+                raise Exception(f"Failed to initialize Gemini AI after {max_retries} attempts: {e}")
+    
     return gemini_analyst
 
 # Test function

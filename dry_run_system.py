@@ -19,6 +19,18 @@ load_dotenv()
 # Get balance from environment
 BALANCE_USD = float(os.getenv('BALANCE_USD', '1000'))
 
+# Global socketio instance (will be set by dashboard_app.py)
+_socketio_instance = None
+
+def set_socketio_instance(socketio):
+    """Set the socketio instance for real-time notifications"""
+    global _socketio_instance
+    _socketio_instance = socketio
+
+def get_socketio_instance():
+    """Get the socketio instance"""
+    return _socketio_instance
+
 # Telegram configuration
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID', '')
@@ -58,7 +70,30 @@ class DryRunSystem:
                 unrealized_pnl REAL DEFAULT 0,
                 indicators TEXT,
                 position_value_usd REAL NOT NULL,
-                ai_entry_reasoning TEXT
+                ai_entry_reasoning TEXT,
+                market_cap REAL DEFAULT 0,
+                market_cap_rank INTEGER DEFAULT 0,
+                total_volume_24h REAL DEFAULT 0,
+                circulating_supply REAL DEFAULT 0,
+                total_supply REAL DEFAULT 0,
+                max_supply REAL DEFAULT 0,
+                price_change_24h REAL DEFAULT 0,
+                price_change_percentage_24h REAL DEFAULT 0,
+                price_change_percentage_7d REAL DEFAULT 0,
+                price_change_percentage_30d REAL DEFAULT 0,
+                ath REAL DEFAULT 0,
+                ath_change_percentage REAL DEFAULT 0,
+                atl REAL DEFAULT 0,
+                atl_change_percentage REAL DEFAULT 0,
+                bybit_volume_24h REAL DEFAULT 0,
+                bybit_turnover_24h REAL DEFAULT 0,
+                liquidity_score REAL DEFAULT 0,
+                volatility_score REAL DEFAULT 0,
+                market_dominance REAL DEFAULT 0,
+                market_cap_category TEXT DEFAULT '',
+                volume_category TEXT DEFAULT '',
+                market_data_timestamp TEXT DEFAULT '',
+                trading_session TEXT DEFAULT 'UNKNOWN'
             )
         ''')
         
@@ -81,7 +116,30 @@ class DryRunSystem:
                 position_value_usd REAL NOT NULL,
                 duration_minutes INTEGER,
                 ai_entry_reasoning TEXT,
-                ai_exit_reasoning TEXT
+                ai_exit_reasoning TEXT,
+                market_cap REAL DEFAULT 0,
+                market_cap_rank INTEGER DEFAULT 0,
+                total_volume_24h REAL DEFAULT 0,
+                circulating_supply REAL DEFAULT 0,
+                total_supply REAL DEFAULT 0,
+                max_supply REAL DEFAULT 0,
+                price_change_24h REAL DEFAULT 0,
+                price_change_percentage_24h REAL DEFAULT 0,
+                price_change_percentage_7d REAL DEFAULT 0,
+                price_change_percentage_30d REAL DEFAULT 0,
+                ath REAL DEFAULT 0,
+                ath_change_percentage REAL DEFAULT 0,
+                atl REAL DEFAULT 0,
+                atl_change_percentage REAL DEFAULT 0,
+                bybit_volume_24h REAL DEFAULT 0,
+                bybit_turnover_24h REAL DEFAULT 0,
+                liquidity_score REAL DEFAULT 0,
+                volatility_score REAL DEFAULT 0,
+                market_dominance REAL DEFAULT 0,
+                market_cap_category TEXT DEFAULT '',
+                volume_category TEXT DEFAULT '',
+                market_data_timestamp TEXT DEFAULT '',
+                trading_session TEXT DEFAULT 'UNKNOWN'
             )
         ''')
         
@@ -105,7 +163,7 @@ class DryRunSystem:
         conn.commit()
         conn.close()
     
-    def open_position(self, signal: Dict) -> str:
+    async def open_position(self, signal: Dict) -> str:
         """Open new position"""
         position_id = str(uuid.uuid4())
         
@@ -142,22 +200,84 @@ class DryRunSystem:
                     'price_distance_from_level': float(signal.get('price_distance_from_level', 0))
                 }
                 
+                # Get market data for this symbol
+                try:
+                    from market_data_system import get_market_data_system
+                    from trading_session_system import get_session_analyzer
+                    market_system = get_market_data_system()
+                    session_analyzer = get_session_analyzer()
+                    market_data = await market_system.get_market_data(signal['symbol'])
+                    
+                    # Get trading session for current time
+                    current_time = datetime.now().isoformat()
+                    trading_session = session_analyzer.get_trading_session(current_time)
+                    
+                except Exception as e:
+                    print(f"⚠️ Could not get market data for {signal['symbol']}: {e}")
+                    market_data = {}
+                    trading_session = 'UNKNOWN'
+                
                 cursor.execute('''
                     INSERT INTO open_positions 
                     (id, symbol, direction, entry_price, quantity, leverage, tp_price, sl_price, 
-                     entry_time, current_price, indicators, position_value_usd, ai_entry_reasoning)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     entry_time, current_price, indicators, position_value_usd, ai_entry_reasoning,
+                     market_cap, market_cap_rank, total_volume_24h, circulating_supply, total_supply, max_supply,
+                     price_change_24h, price_change_percentage_24h, price_change_percentage_7d, price_change_percentage_30d,
+                     ath, ath_change_percentage, atl, atl_change_percentage, bybit_volume_24h, bybit_turnover_24h,
+                     liquidity_score, volatility_score, market_dominance, market_cap_category, volume_category, market_data_timestamp, trading_session)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     position_id, signal['symbol'], signal['direction'], signal['close'],
                     signal['pos_size'], signal['leverage'], signal['tp'], signal['sl'],
                     datetime.now().isoformat(), signal['close'], json.dumps(indicators),
-                    signal['position_value_usd'], signal.get('ai_entry_reasoning', '')
+                    signal['position_value_usd'], signal.get('ai_entry_reasoning', ''),
+                    # Market data
+                    market_data.get('market_cap', 0),
+                    market_data.get('market_cap_rank', 0),
+                    market_data.get('total_volume_24h', 0),
+                    market_data.get('circulating_supply', 0),
+                    market_data.get('total_supply', 0),
+                    market_data.get('max_supply', 0),
+                    market_data.get('price_change_24h', 0),
+                    market_data.get('price_change_percentage_24h', 0),
+                    market_data.get('price_change_percentage_7d', 0),
+                    market_data.get('price_change_percentage_30d', 0),
+                    market_data.get('ath', 0),
+                    market_data.get('ath_change_percentage', 0),
+                    market_data.get('atl', 0),
+                    market_data.get('atl_change_percentage', 0),
+                    market_data.get('bybit_volume_24h', 0),
+                    market_data.get('bybit_turnover_24h', 0),
+                    market_data.get('liquidity_score', 0),
+                    market_data.get('volatility_score', 0),
+                    market_data.get('market_dominance', 0),
+                    market_system.categorize_market_cap(market_data.get('market_cap', 0)) if market_data else "",
+                    market_system.categorize_volume(market_data.get('total_volume_24h', 0)) if market_data else "",
+                    market_data.get('timestamp', ''),
+                    trading_session
                 ))
         
                 conn.commit()
                 conn.close()
                 
                 print(f"🚀 [DRY RUN] Opened {signal['direction']} position for {signal['symbol']}")
+                
+                # Send notification using file-based system
+                try:
+                    from notification_system import send_notification
+                    send_notification('position_opened', {
+                        'symbol': signal['symbol'],
+                        'direction': signal['direction'],
+                        'entry_price': signal['close'],
+                        'tp_price': signal['tp'],
+                        'sl_price': signal['sl'],
+                        'leverage': signal['leverage'],
+                        'position_value_usd': signal['position_value_usd'],
+                        'mode': 'dry-run'
+                    })
+                except Exception as e:
+                    print(f"⚠️ Failed to send notification: {e}")
+                
                 return position_id
                 
             except sqlite3.OperationalError as e:
@@ -186,11 +306,16 @@ class DryRunSystem:
                 positions = cursor.fetchall()
                 
                 for pos in positions:
-                    # Handle both old and new schema with ai_entry_reasoning
-                    if len(pos) >= 14:  # New schema with AI reasoning
+                    # Handle different database schemas (old vs new with market data)
+                    if len(pos) >= 36:  # New schema with market data (14 original + 22 market data columns)
                         (pos_id, symbol, direction, entry_price, quantity, leverage, 
-                         tp_price, sl_price, entry_time, _, unrealized_pnl, indicators, position_value_usd, ai_entry_reasoning) = pos
-                    else:  # Old schema without AI reasoning
+                         tp_price, sl_price, entry_time, _, unrealized_pnl, indicators, 
+                         position_value_usd, ai_entry_reasoning) = pos[:14]  # Take only first 14 columns
+                    elif len(pos) >= 14:  # Old schema with AI reasoning but no market data
+                        (pos_id, symbol, direction, entry_price, quantity, leverage, 
+                         tp_price, sl_price, entry_time, _, unrealized_pnl, indicators, 
+                         position_value_usd, ai_entry_reasoning) = pos
+                    else:  # Very old schema without AI reasoning and market data
                         (pos_id, symbol, direction, entry_price, quantity, leverage, 
                          tp_price, sl_price, entry_time, _, unrealized_pnl, indicators, position_value_usd) = pos
                         ai_entry_reasoning = ""
@@ -283,14 +408,59 @@ class DryRunSystem:
         pos = cursor.fetchone()
         
         if pos:
-            # Handle both old and new database schemas
-            if len(pos) >= 14:  # New schema with AI reasoning
+            # Handle different database schemas (old vs new with market data and trading session)
+            if len(pos) >= 37:  # New schema with market data and trading session
+                (pos_id, symbol, direction, entry_price, quantity, leverage, 
+                 tp_price, sl_price, entry_time, _, _, indicators, position_value_usd, ai_entry_reasoning,
+                 market_cap, market_cap_rank, total_volume_24h, circulating_supply, total_supply, max_supply,
+                 price_change_24h, price_change_percentage_24h, price_change_percentage_7d, price_change_percentage_30d,
+                 ath, ath_change_percentage, atl, atl_change_percentage, bybit_volume_24h, bybit_turnover_24h,
+                 liquidity_score, volatility_score, market_dominance, market_cap_category, volume_category, market_data_timestamp, trading_session) = pos
+            elif len(pos) >= 36:  # New schema with market data but no trading session
+                (pos_id, symbol, direction, entry_price, quantity, leverage, 
+                 tp_price, sl_price, entry_time, _, _, indicators, position_value_usd, ai_entry_reasoning,
+                 market_cap, market_cap_rank, total_volume_24h, circulating_supply, total_supply, max_supply,
+                 price_change_24h, price_change_percentage_24h, price_change_percentage_7d, price_change_percentage_30d,
+                 ath, ath_change_percentage, atl, atl_change_percentage, bybit_volume_24h, bybit_turnover_24h,
+                 liquidity_score, volatility_score, market_dominance, market_cap_category, volume_category, market_data_timestamp) = pos
+                # Get trading session from entry time
+                try:
+                    from trading_session_system import get_session_analyzer
+                    session_analyzer = get_session_analyzer()
+                    trading_session = session_analyzer.get_trading_session(entry_time)
+                except:
+                    trading_session = 'UNKNOWN'
+            elif len(pos) >= 14:  # Old schema with AI reasoning but no market data
                 (pos_id, symbol, direction, entry_price, quantity, leverage, 
                  tp_price, sl_price, entry_time, _, _, indicators, position_value_usd, ai_entry_reasoning) = pos
-            else:  # Old schema without AI reasoning
+                # Set default market data values
+                (market_cap, market_cap_rank, total_volume_24h, circulating_supply, total_supply, max_supply,
+                 price_change_24h, price_change_percentage_24h, price_change_percentage_7d, price_change_percentage_30d,
+                 ath, ath_change_percentage, atl, atl_change_percentage, bybit_volume_24h, bybit_turnover_24h,
+                 liquidity_score, volatility_score, market_dominance, market_cap_category, volume_category, market_data_timestamp) = [0] * 20 + ["", ""]
+                # Get trading session from entry time
+                try:
+                    from trading_session_system import get_session_analyzer
+                    session_analyzer = get_session_analyzer()
+                    trading_session = session_analyzer.get_trading_session(entry_time)
+                except:
+                    trading_session = 'UNKNOWN'
+            else:  # Very old schema without AI reasoning and market data
                 (pos_id, symbol, direction, entry_price, quantity, leverage, 
                  tp_price, sl_price, entry_time, _, _, indicators, position_value_usd) = pos
                 ai_entry_reasoning = ""
+                # Set default market data values
+                (market_cap, market_cap_rank, total_volume_24h, circulating_supply, total_supply, max_supply,
+                 price_change_24h, price_change_percentage_24h, price_change_percentage_7d, price_change_percentage_30d,
+                 ath, ath_change_percentage, atl, atl_change_percentage, bybit_volume_24h, bybit_turnover_24h,
+                 liquidity_score, volatility_score, market_dominance, market_cap_category, volume_category, market_data_timestamp) = [0] * 20 + ["", ""]
+                # Get trading session from entry time
+                try:
+                    from trading_session_system import get_session_analyzer
+                    session_analyzer = get_session_analyzer()
+                    trading_session = session_analyzer.get_trading_session(entry_time)
+                except:
+                    trading_session = 'UNKNOWN'
             
             # Calculate final PnL
             if direction == "LONG":
@@ -315,13 +485,23 @@ class DryRunSystem:
                 INSERT INTO trade_history 
                 (id, symbol, direction, entry_price, exit_price, quantity, leverage,
                  entry_time, exit_time, exit_reason, pnl, pnl_percentage, indicators,
-                 position_value_usd, duration_minutes, ai_entry_reasoning, ai_exit_reasoning)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 position_value_usd, duration_minutes, ai_entry_reasoning, ai_exit_reasoning,
+                 market_cap, market_cap_rank, total_volume_24h, circulating_supply, total_supply, max_supply,
+                 price_change_24h, price_change_percentage_24h, price_change_percentage_7d, price_change_percentage_30d,
+                 ath, ath_change_percentage, atl, atl_change_percentage, bybit_volume_24h, bybit_turnover_24h,
+                 liquidity_score, volatility_score, market_dominance, market_cap_category, volume_category, market_data_timestamp, trading_session)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 pos_id, symbol, direction, entry_price, exit_price, quantity, leverage,
                 entry_time, exit_dt.isoformat(), exit_reason, pnl, pnl_percentage,
                 indicators, position_value_usd, duration_minutes, 
-                ai_entry_reasoning, ai_exit_reasoning
+                ai_entry_reasoning, ai_exit_reasoning,
+                # Copy market data from open position (use existing values from when position was opened)
+                market_cap, market_cap_rank, total_volume_24h, circulating_supply, total_supply, max_supply,
+                price_change_24h, price_change_percentage_24h, price_change_percentage_7d, price_change_percentage_30d,
+                ath, ath_change_percentage, atl, atl_change_percentage, bybit_volume_24h, bybit_turnover_24h,
+                liquidity_score, volatility_score, market_dominance, market_cap_category, volume_category, market_data_timestamp,
+                trading_session
             ))
             
             # Remove from open positions
@@ -331,6 +511,23 @@ class DryRunSystem:
             self._update_performance_metrics(conn)
             
             print(f"✅ [DRY RUN] Closed {direction} {symbol} - {exit_reason} - PnL: ${pnl:.2f} ({pnl_percentage:.2f}%)")
+            
+            # Send notification using file-based system
+            try:
+                from notification_system import send_notification
+                send_notification('position_closed', {
+                    'symbol': symbol,
+                    'direction': direction,
+                    'entry_price': entry_price,
+                    'exit_price': exit_price,
+                    'exit_reason': exit_reason,
+                    'pnl': pnl,
+                    'pnl_percentage': pnl_percentage,
+                    'duration_minutes': duration_minutes,
+                    'mode': 'dry-run'
+                })
+            except Exception as e:
+                print(f"⚠️ Failed to send notification: {e}")
             
             # Send AI Exit Reasoning to Telegram (async call)
             if ai_exit_reasoning and ai_exit_reasoning.strip():
@@ -355,7 +552,20 @@ class DryRunSystem:
             
             gemini_analyst = get_gemini_analyst()
             if not gemini_analyst:
-                return f"Exit reasoning unavailable - {exit_reason}"
+                print(f"❌ CRITICAL: Gemini analyst not available for {pos[1] if len(pos) > 1 else 'N/A'}")
+                print("🔄 Attempting to reinitialize Gemini AI...")
+                
+                # Force reinitialize
+                try:
+                    from gemini_ai_system import GeminiMarketAnalyst
+                    gemini_analyst = GeminiMarketAnalyst()
+                    print("✅ Gemini AI reinitialized successfully")
+                except Exception as init_error:
+                    print(f"❌ Failed to reinitialize Gemini AI: {init_error}")
+                    raise Exception(f"Gemini AI is required but unavailable: {init_error}")
+            
+            if not gemini_analyst:
+                raise Exception("Gemini AI is required for exit reasoning but could not be initialized")
             
             # Calculate PnL correctly
             realized_pnl = (exit_price - pos[3]) * pos[4] if pos[2] == "LONG" else (pos[3] - exit_price) * pos[4]
@@ -384,7 +594,24 @@ class DryRunSystem:
             
         except Exception as e:
             print(f"⚠️  Failed to generate exit reasoning: {e}")
-            return f"Exit reasoning unavailable - {exit_reason}"
+            import traceback
+            traceback.print_exc()
+            
+            # Return proper format even on error
+            symbol = pos[1] if len(pos) > 1 else 'N/A'
+            direction = pos[2] if len(pos) > 2 else 'N/A'
+            
+            return f"""<b>📊 Ringkasan Eksekusi:</b><br>
+Posisi {direction} pada {symbol} ditutup dengan alasan {exit_reason}. Analisis AI tidak tersedia karena error sistem, namun posisi telah ditutup sesuai dengan strategi risk management.<br><br>
+
+<b>📈 Analisis Market:</b><br>
+Kondisi market saat exit memerlukan evaluasi manual karena sistem AI mengalami gangguan sementara.<br><br>
+
+<b>🔍 Evaluasi Teknikal:</b><br>
+Indikator teknikal dan sinyal entry perlu dievaluasi secara manual untuk memahami hasil trade ini.<br><br>
+
+<b>💡 Insight dan Rekomendasi:</b><br>
+Meskipun analisis AI tidak tersedia, trade ini tetap mengikuti protokol risk management yang telah ditetapkan. Lakukan evaluasi manual untuk pembelajaran selanjutnya."""
     
     
     def _update_performance_metrics(self, conn):
@@ -448,16 +675,54 @@ class DryRunSystem:
         
         result = []
         for pos in positions:
-            # Handle both old and new schema with ai_entry_reasoning
-            if len(pos) >= 14:  # New schema with AI reasoning
+            # Handle different database schemas (old vs new with market data and trading session)
+            if len(pos) >= 37:  # New schema with market data and trading session
+                (pos_id, symbol, direction, entry_price, quantity, leverage, 
+                 tp_price, sl_price, entry_time, current_price, unrealized_pnl, 
+                 indicators, position_value_usd, ai_entry_reasoning) = pos[:14]  # Take only first 14 columns
+                # Extract market data and trading session
+                market_data_cols = pos[14:36]  # Columns 14-35 are market data
+                trading_session = pos[36] if len(pos) > 36 else 'UNKNOWN'
+            elif len(pos) >= 36:  # New schema with market data but no trading session
+                (pos_id, symbol, direction, entry_price, quantity, leverage, 
+                 tp_price, sl_price, entry_time, current_price, unrealized_pnl, 
+                 indicators, position_value_usd, ai_entry_reasoning) = pos[:14]  # Take only first 14 columns
+                # Extract market data
+                market_data_cols = pos[14:36]  # Columns 14-35 are market data
+                # Get trading session from entry time
+                try:
+                    from trading_session_system import get_session_analyzer
+                    session_analyzer = get_session_analyzer()
+                    trading_session = session_analyzer.get_trading_session(entry_time)
+                except:
+                    trading_session = 'UNKNOWN'
+            elif len(pos) >= 14:  # Old schema with AI reasoning but no market data
                 (pos_id, symbol, direction, entry_price, quantity, leverage, 
                  tp_price, sl_price, entry_time, current_price, unrealized_pnl, 
                  indicators, position_value_usd, ai_entry_reasoning) = pos
-            else:  # Old schema without AI reasoning
+                # Set default market data
+                market_data_cols = [0] * 22
+                # Get trading session from entry time
+                try:
+                    from trading_session_system import get_session_analyzer
+                    session_analyzer = get_session_analyzer()
+                    trading_session = session_analyzer.get_trading_session(entry_time)
+                except:
+                    trading_session = 'UNKNOWN'
+            else:  # Very old schema without AI reasoning and market data
                 (pos_id, symbol, direction, entry_price, quantity, leverage, 
                  tp_price, sl_price, entry_time, current_price, unrealized_pnl, 
                  indicators, position_value_usd) = pos
                 ai_entry_reasoning = ""
+                # Set default market data
+                market_data_cols = [0] * 22
+                # Get trading session from entry time
+                try:
+                    from trading_session_system import get_session_analyzer
+                    session_analyzer = get_session_analyzer()
+                    trading_session = session_analyzer.get_trading_session(entry_time)
+                except:
+                    trading_session = 'UNKNOWN'
             
             result.append({
                 'id': pos_id,
@@ -473,14 +738,15 @@ class DryRunSystem:
                 'unrealized_pnl': unrealized_pnl or 0,
                 'indicators': json.loads(indicators) if indicators else {},
                 'position_value_usd': position_value_usd,
-                'ai_entry_reasoning': ai_entry_reasoning
+                'ai_entry_reasoning': ai_entry_reasoning,
+                'trading_session': trading_session
             })
         
         conn.close()
         return result
     
     def get_trade_history(self, limit: int = 50) -> List[Dict]:
-        """Get trade history with AI reasoning"""
+        """Get trade history with AI reasoning and market data"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
@@ -494,17 +760,64 @@ class DryRunSystem:
         
         result = []
         for trade in trades:
-            # Handle both old and new schema
-            if len(trade) >= 17:  # New schema with AI reasoning
+            # Handle different schema lengths (old vs new with market data and trading session)
+            if len(trade) >= 39:  # New schema with market data and trading session
+                (trade_id, symbol, direction, entry_price, exit_price, quantity, leverage,
+                 entry_time, exit_time, exit_reason, pnl, pnl_percentage, indicators,
+                 position_value_usd, duration_minutes, ai_entry_reasoning, ai_exit_reasoning,
+                 market_cap, market_cap_rank, total_volume_24h, circulating_supply, total_supply, max_supply,
+                 price_change_24h, price_change_percentage_24h, price_change_percentage_7d, price_change_percentage_30d,
+                 ath, ath_change_percentage, atl, atl_change_percentage, bybit_volume_24h, bybit_turnover_24h,
+                 liquidity_score, volatility_score, market_dominance, market_cap_category, volume_category, market_data_timestamp, trading_session) = trade
+            elif len(trade) >= 38:  # New schema with market data but no trading session
+                (trade_id, symbol, direction, entry_price, exit_price, quantity, leverage,
+                 entry_time, exit_time, exit_reason, pnl, pnl_percentage, indicators,
+                 position_value_usd, duration_minutes, ai_entry_reasoning, ai_exit_reasoning,
+                 market_cap, market_cap_rank, total_volume_24h, circulating_supply, total_supply, max_supply,
+                 price_change_24h, price_change_percentage_24h, price_change_percentage_7d, price_change_percentage_30d,
+                 ath, ath_change_percentage, atl, atl_change_percentage, bybit_volume_24h, bybit_turnover_24h,
+                 liquidity_score, volatility_score, market_dominance, market_cap_category, volume_category, market_data_timestamp) = trade
+                # Get trading session from entry time
+                try:
+                    from trading_session_system import get_session_analyzer
+                    session_analyzer = get_session_analyzer()
+                    trading_session = session_analyzer.get_trading_session(entry_time)
+                except:
+                    trading_session = 'UNKNOWN'
+            elif len(trade) >= 17:  # Old schema with AI reasoning but no market data
                 (trade_id, symbol, direction, entry_price, exit_price, quantity, leverage,
                  entry_time, exit_time, exit_reason, pnl, pnl_percentage, indicators,
                  position_value_usd, duration_minutes, ai_entry_reasoning, ai_exit_reasoning) = trade
-            else:  # Old schema without AI reasoning
+                # Set default market data values
+                (market_cap, market_cap_rank, total_volume_24h, circulating_supply, total_supply, max_supply,
+                 price_change_24h, price_change_percentage_24h, price_change_percentage_7d, price_change_percentage_30d,
+                 ath, ath_change_percentage, atl, atl_change_percentage, bybit_volume_24h, bybit_turnover_24h,
+                 liquidity_score, volatility_score, market_dominance, market_cap_category, volume_category, market_data_timestamp) = [0] * 20 + ["", ""]
+                # Get trading session from entry time
+                try:
+                    from trading_session_system import get_session_analyzer
+                    session_analyzer = get_session_analyzer()
+                    trading_session = session_analyzer.get_trading_session(entry_time)
+                except:
+                    trading_session = 'UNKNOWN'
+            else:  # Very old schema without AI reasoning and market data
                 (trade_id, symbol, direction, entry_price, exit_price, quantity, leverage,
                  entry_time, exit_time, exit_reason, pnl, pnl_percentage, indicators,
                  position_value_usd, duration_minutes) = trade
                 ai_entry_reasoning = ""
                 ai_exit_reasoning = ""
+                # Set default market data values
+                (market_cap, market_cap_rank, total_volume_24h, circulating_supply, total_supply, max_supply,
+                 price_change_24h, price_change_percentage_24h, price_change_percentage_7d, price_change_percentage_30d,
+                 ath, ath_change_percentage, atl, atl_change_percentage, bybit_volume_24h, bybit_turnover_24h,
+                 liquidity_score, volatility_score, market_dominance, market_cap_category, volume_category, market_data_timestamp) = [0] * 20 + ["", ""]
+                # Get trading session from entry time
+                try:
+                    from trading_session_system import get_session_analyzer
+                    session_analyzer = get_session_analyzer()
+                    trading_session = session_analyzer.get_trading_session(entry_time)
+                except:
+                    trading_session = 'UNKNOWN'
             
             result.append({
                 'id': trade_id,
@@ -523,7 +836,17 @@ class DryRunSystem:
                 'position_value_usd': position_value_usd,
                 'duration_minutes': duration_minutes,
                 'ai_entry_reasoning': ai_entry_reasoning,
-                'ai_exit_reasoning': ai_exit_reasoning
+                'ai_exit_reasoning': ai_exit_reasoning,
+                'trading_session': trading_session,
+                # Market data
+                'market_cap': market_cap,
+                'market_cap_rank': market_cap_rank,
+                'total_volume_24h': total_volume_24h,
+                'liquidity_score': liquidity_score,
+                'volatility_score': volatility_score,
+                'market_dominance': market_dominance,
+                'market_cap_category': market_cap_category,
+                'volume_category': volume_category
             })
         
         conn.close()
@@ -545,8 +868,17 @@ class DryRunSystem:
         
         conn.close()
         
+        # Get starting balance from environment
+        import os
+        from dotenv import load_dotenv
+        load_dotenv()
+        starting_balance = float(os.getenv('BALANCE_USD', '1167'))
+        
         # Current balance = starting balance + total PnL
-        current_balance = BALANCE_USD + total_pnl
+        current_balance = starting_balance + total_pnl
+        
+        print(f"💰 Dynamic Balance: Starting ${starting_balance:.2f} + PnL ${total_pnl:.2f} = ${current_balance:.2f}")
+        
         return current_balance
     
     def get_performance_metrics(self) -> Dict:
@@ -565,7 +897,11 @@ class DryRunSystem:
              max_drawdown, balance, win_rate, avg_win, avg_loss, profit_factor) = metrics
             
             # Calculate ROI Account = Total PnL / Starting Balance
-            roi_account = (total_pnl / BALANCE_USD) * 100 if BALANCE_USD > 0 else 0
+            import os
+            from dotenv import load_dotenv
+            load_dotenv()
+            starting_balance = float(os.getenv('BALANCE_USD', '1167'))
+            roi_account = (total_pnl / starting_balance) * 100 if starting_balance > 0 else 0
             
             result = {
                 'date': date,

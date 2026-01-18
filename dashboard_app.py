@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from dry_run_system import dry_run_system
 from real_trade_system import real_trade_system
 from dashboard_ai_chat import setup_ai_chat_routes
+from trading_session_system import get_session_analyzer
 import threading
 import time
 from dotenv import load_dotenv
@@ -27,6 +28,12 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 # Setup AI chat routes
 ai_chat = setup_ai_chat_routes(app, socketio)
 
+# Set socketio instance in trading systems for notifications
+from dry_run_system import set_socketio_instance as set_dry_run_socketio
+from real_trade_system import set_socketio_instance as set_real_trade_socketio
+set_dry_run_socketio(socketio)
+set_real_trade_socketio(socketio)
+
 # Global variables untuk real-time updates
 latest_signals = []
 latest_prices = {}
@@ -35,6 +42,18 @@ latest_prices = {}
 def dashboard():
     """Main dashboard page"""
     return render_template('dashboard.html')
+
+@app.route('/api/notifications')
+def get_notifications():
+    """API endpoint untuk mendapatkan notifikasi baru"""
+    last_id = int(request.args.get('last_id', 0))
+    
+    try:
+        from notification_system import get_new_notifications
+        notifications = get_new_notifications(last_id)
+        return jsonify({'success': True, 'notifications': notifications})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/positions')
 def get_positions():
@@ -80,29 +99,40 @@ def get_trade_details(trade_id):
         if not trade_data:
             return jsonify({'success': False, 'error': 'Trade not found'})
         
-        # Handle both old and new schema
+        # Handle different schema versions - extract only the first columns we need
         if mode == 'dry_run':
-            if len(trade_data) >= 17:  # New schema with AI reasoning
+            # Dry run schema: 40 columns total, we need first 17
+            if len(trade_data) >= 40:  # New schema with market data (40 columns)
                 (trade_id, symbol, direction, entry_price, exit_price, quantity, leverage,
                  entry_time, exit_time, exit_reason, pnl, pnl_percentage, indicators,
-                 position_value_usd, duration_minutes, ai_entry_reasoning, ai_exit_reasoning) = trade_data
-            else:  # Old schema without AI reasoning
+                 position_value_usd, duration_minutes, ai_entry_reasoning, ai_exit_reasoning) = trade_data[:17]
+            elif len(trade_data) >= 17:  # Schema with AI reasoning but no market data
                 (trade_id, symbol, direction, entry_price, exit_price, quantity, leverage,
                  entry_time, exit_time, exit_reason, pnl, pnl_percentage, indicators,
-                 position_value_usd, duration_minutes) = trade_data
+                 position_value_usd, duration_minutes, ai_entry_reasoning, ai_exit_reasoning) = trade_data[:17]
+            else:  # Old schema without AI reasoning (15 columns)
+                (trade_id, symbol, direction, entry_price, exit_price, quantity, leverage,
+                 entry_time, exit_time, exit_reason, pnl, pnl_percentage, indicators,
+                 position_value_usd, duration_minutes) = trade_data[:15]
                 ai_entry_reasoning = ""
                 ai_exit_reasoning = ""
         else:  # real trade
-            if len(trade_data) >= 19:  # New schema with AI reasoning
+            # Real trade schema: 43 columns total, we need first 20
+            if len(trade_data) >= 43:  # New schema with market data (43 columns)
                 (trade_id, symbol, direction, entry_price, exit_price, quantity, leverage,
                  entry_time, exit_time, exit_reason, pnl, pnl_percentage, indicators,
                  position_value_usd, duration_minutes, bybit_entry_order_id, 
-                 bybit_exit_order_id, fees_paid, ai_entry_reasoning, ai_exit_reasoning) = trade_data
-            else:  # Old schema without AI reasoning
+                 bybit_exit_order_id, fees_paid, ai_entry_reasoning, ai_exit_reasoning) = trade_data[:20]
+            elif len(trade_data) >= 20:  # Schema with AI reasoning but no market data
                 (trade_id, symbol, direction, entry_price, exit_price, quantity, leverage,
                  entry_time, exit_time, exit_reason, pnl, pnl_percentage, indicators,
                  position_value_usd, duration_minutes, bybit_entry_order_id, 
-                 bybit_exit_order_id, fees_paid) = trade_data
+                 bybit_exit_order_id, fees_paid, ai_entry_reasoning, ai_exit_reasoning) = trade_data[:20]
+            else:  # Old schema without AI reasoning (18 columns)
+                (trade_id, symbol, direction, entry_price, exit_price, quantity, leverage,
+                 entry_time, exit_time, exit_reason, pnl, pnl_percentage, indicators,
+                 position_value_usd, duration_minutes, bybit_entry_order_id, 
+                 bybit_exit_order_id, fees_paid) = trade_data[:18]
                 ai_entry_reasoning = ""
                 ai_exit_reasoning = ""
         
@@ -224,18 +254,111 @@ def get_performance():
     
     return jsonify(metrics)
 
+@app.route('/api/session-performance')
+def get_session_performance():
+    """API endpoint untuk session performance analysis"""
+    mode = request.args.get('mode', 'dry-run').replace('-', '_')
+    days = int(request.args.get('days', 30))
+    
+    session_analyzer = get_session_analyzer()
+    performance = session_analyzer.get_session_performance(mode, days)
+    
+    return jsonify(performance)
+
+@app.route('/api/session-comparison')
+def get_session_comparison():
+    """API endpoint untuk session comparison"""
+    mode = request.args.get('mode', 'dry-run').replace('-', '_')
+    days = int(request.args.get('days', 30))
+    
+    session_analyzer = get_session_analyzer()
+    comparison = session_analyzer.get_session_comparison(mode, days)
+    
+    return jsonify(comparison)
+
+@app.route('/api/best-worst-sessions')
+def get_best_worst_sessions():
+    """API endpoint untuk best/worst sessions"""
+    mode = request.args.get('mode', 'dry-run').replace('-', '_')
+    days = int(request.args.get('days', 30))
+    
+    session_analyzer = get_session_analyzer()
+    best_worst = session_analyzer.get_best_worst_sessions(mode, days)
+    
+    return jsonify(best_worst)
+
+@app.route('/api/indicator-performance')
+def get_indicator_performance():
+    """API endpoint untuk overall indicator performance analysis"""
+    mode = request.args.get('mode', 'dry-run').replace('-', '_')
+    days = int(request.args.get('days', 30))
+    
+    from overall_indicator_performance_system import get_overall_indicator_analyzer
+    
+    analyzer = get_overall_indicator_analyzer()
+    performance = analyzer.get_overall_indicator_performance(mode, days)
+    
+    if performance.get('success'):
+        # Add category summary
+        categories = analyzer.get_indicator_categories_summary(performance)
+        performance['categories'] = categories
+        
+        # Add recommendations
+        recommendations = analyzer.get_indicator_recommendations(performance)
+        performance['recommendations'] = recommendations
+    
+    return jsonify(performance)
+
+@app.route('/api/pair-performance')
+def get_pair_performance():
+    """API endpoint untuk pair performance analysis"""
+    mode = request.args.get('mode', 'dry-run').replace('-', '_')
+    days = int(request.args.get('days', 30))
+    
+    from pair_performance_system import get_pair_analyzer
+    import asyncio
+    
+    analyzer = get_pair_analyzer()
+    
+    # Run async function in event loop
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    performance = loop.run_until_complete(analyzer.get_pair_performance(mode, days))
+    loop.close()
+    
+    if performance.get('success'):
+        # Add category summary
+        categories = analyzer.get_pair_categories_summary(performance)
+        performance['categories'] = categories
+        
+        # Add recommendations
+        recommendations = analyzer.get_trading_recommendations(performance)
+        performance['recommendations'] = recommendations
+    
+    return jsonify(performance)
 @app.route('/api/chart-data')
 def get_chart_data():
-    """API endpoint untuk chart data"""
+    """API endpoint untuk chart data dengan dynamic balance"""
     mode = request.args.get('mode', 'dry-run')
+    
+    # Get starting balance from environment
+    import os
+    from dotenv import load_dotenv
+    load_dotenv()
+    starting_balance = float(os.getenv('BALANCE_USD', '1167'))
     
     if mode == 'dry-run':
         # Get daily PnL for chart
         history = dry_run_system.get_trade_history(1000)  # Get more data for chart
-        starting_balance = BALANCE_USD  # Dari environment untuk dry run
     else:
         history = real_trade_system.get_trade_history(1000)
-        starting_balance = real_trade_system.get_real_balance()  # Dari Bybit untuk real trading
+        # For real trading, get actual starting balance from API if needed
+        try:
+            actual_balance = real_trade_system.get_real_balance()
+            if actual_balance > 0:
+                starting_balance = actual_balance
+        except:
+            pass  # Use environment balance as fallback
     
     # Group by date
     daily_pnl = {}
@@ -261,7 +384,7 @@ def get_chart_data():
             'date': start_date,
             'daily_pnl': 0,
             'cumulative_pnl': 0,
-            'balance': starting_balance  # Starting balance $1000
+            'balance': starting_balance  # Dynamic starting balance
         })
     else:
         # Jika belum ada trade, tampilkan hari ini dengan balance awal
@@ -271,17 +394,40 @@ def get_chart_data():
             'date': today,
             'daily_pnl': 0,
             'cumulative_pnl': 0,
-            'balance': starting_balance  # Starting balance $1000
+            'balance': starting_balance  # Dynamic starting balance
         })
     
     # Tambah data trade harian
     for date in sorted(daily_pnl.keys()):
         cumulative_pnl += daily_pnl[date]
+        current_balance = starting_balance + cumulative_pnl
+        
         chart_data.append({
             'date': date,
             'daily_pnl': daily_pnl[date],
             'cumulative_pnl': cumulative_pnl,
-            'balance': starting_balance + cumulative_pnl
+            'balance': current_balance,
+            'roi_percent': ((cumulative_pnl / starting_balance) * 100) if starting_balance > 0 else 0
+        })
+    
+    # Add current day if not already included
+    from datetime import datetime
+    today = datetime.now().strftime('%Y-%m-%d')
+    if not daily_pnl or today not in daily_pnl:
+        # Get current dynamic balance for today
+        if mode == 'dry-run':
+            current_dynamic_balance = dry_run_system.get_current_balance()
+            current_cumulative_pnl = current_dynamic_balance - starting_balance
+        else:
+            current_cumulative_pnl = cumulative_pnl  # Use last known PnL
+            current_dynamic_balance = starting_balance + current_cumulative_pnl
+        
+        chart_data.append({
+            'date': today,
+            'daily_pnl': 0,  # No trades today yet
+            'cumulative_pnl': current_cumulative_pnl,
+            'balance': current_dynamic_balance,
+            'roi_percent': ((current_cumulative_pnl / starting_balance) * 100) if starting_balance > 0 else 0
         })
     
     return jsonify(chart_data)

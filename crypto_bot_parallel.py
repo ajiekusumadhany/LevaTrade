@@ -10,6 +10,7 @@ from telegram.error import TelegramError
 from dotenv import load_dotenv
 from concurrent.futures import ThreadPoolExecutor
 import threading
+import re
 from dry_run_system import dry_run_system
 from early_exit_system import early_exit_system
 from error_notification_system import error_notifier, notify_insufficient_balance, notify_order_rejected
@@ -21,6 +22,98 @@ from hard_stop_system import hard_stop_system
 load_dotenv()
 
 # ==================
+# HTML CLEANING FOR TELEGRAM
+# ==================
+def clean_html_for_telegram(text: str) -> str:
+    """
+    Clean HTML content for Telegram compatibility
+    Removes unsupported HTML tags and converts supported ones
+    """
+    if not text or not isinstance(text, str):
+        return ""
+    
+    # Remove or convert unsupported HTML tags
+    text = re.sub(r'<div[^>]*>', '', text)
+    text = re.sub(r'</div>', '\n', text)
+    text = re.sub(r'<span[^>]*>', '', text)
+    text = re.sub(r'</span>', '', text)
+    text = re.sub(r'<p[^>]*>', '', text)
+    text = re.sub(r'</p>', '\n', text)
+    text = re.sub(r'<ul[^>]*>', '', text)
+    text = re.sub(r'</ul>', '', text)
+    text = re.sub(r'<ol[^>]*>', '', text)
+    text = re.sub(r'</ol>', '', text)
+    text = re.sub(r'<li[^>]*>', '• ', text)
+    text = re.sub(r'</li>', '\n', text)
+    text = re.sub(r'<h[1-6][^>]*>', '<b>', text)
+    text = re.sub(r'</h[1-6]>', '</b>\n', text)
+    
+    # Convert supported HTML tags
+    text = re.sub(r'<strong[^>]*>', '<b>', text)
+    text = re.sub(r'</strong>', '</b>', text)
+    text = re.sub(r'<em[^>]*>', '<i>', text)
+    text = re.sub(r'</em>', '</i>', text)
+    text = re.sub(r'<br[^>]*/?>', '\n', text)
+    
+    # Remove any remaining unsupported HTML tags (but keep <b>, <i>, <u>, <s>, <code>, <pre>)
+    text = re.sub(r'<(?!/?(?:b|i|u|s|code|pre)\b)[^>]+>', '', text)
+    
+    # Fix unclosed tags by ensuring all opening tags have closing tags
+    # Count and balance <b> tags
+    b_open = text.count('<b>')
+    b_close = text.count('</b>')
+    if b_open > b_close:
+        text += '</b>' * (b_open - b_close)
+    elif b_close > b_open:
+        text = '<b>' * (b_close - b_open) + text
+    
+    # Count and balance <i> tags
+    i_open = text.count('<i>')
+    i_close = text.count('</i>')
+    if i_open > i_close:
+        text += '</i>' * (i_open - i_close)
+    elif i_close > i_open:
+        text = '<i>' * (i_close - i_open) + text
+    
+    # Count and balance <u> tags
+    u_open = text.count('<u>')
+    u_close = text.count('</u>')
+    if u_open > u_close:
+        text += '</u>' * (u_open - u_close)
+    elif u_close > u_open:
+        text = '<u>' * (u_close - u_open) + text
+    
+    # Count and balance <s> tags
+    s_open = text.count('<s>')
+    s_close = text.count('</s>')
+    if s_open > s_close:
+        text += '</s>' * (s_open - s_close)
+    elif s_close > s_open:
+        text = '<s>' * (s_close - s_open) + text
+    
+    # Count and balance <code> tags
+    code_open = text.count('<code>')
+    code_close = text.count('</code>')
+    if code_open > code_close:
+        text += '</code>' * (code_open - code_close)
+    elif code_close > code_open:
+        text = '<code>' * (code_close - code_open) + text
+    
+    # Count and balance <pre> tags
+    pre_open = text.count('<pre>')
+    pre_close = text.count('</pre>')
+    if pre_open > pre_close:
+        text += '</pre>' * (pre_open - pre_close)
+    elif pre_close > pre_open:
+        text = '<pre>' * (pre_close - pre_open) + text
+    
+    # Clean up multiple newlines
+    text = re.sub(r'\n\s*\n\s*\n+', '\n\n', text)
+    text = re.sub(r'^\s+|\s+$', '', text)
+    
+    return text
+
+# ==================
 # KONFIGURASI
 # ==================
 BYBIT_API_KEY = os.getenv('BYBIT_API_KEY', '')
@@ -29,11 +122,11 @@ TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID', '')
 
 # Trading Parameters (dari environment variables)
-BALANCE = float(os.getenv('BALANCE_USD', '1000'))  # Default $1000
-MAX_RISK = float(os.getenv('MAX_RISK_PERCENT', '1.0'))  # Default 1%
+BALANCE = float(os.getenv('BALANCE_USD', '1167'))  # Updated to actual balance
+MAX_RISK = float(os.getenv('MAX_RISK_PERCENT', '0.5'))  # Reduced to 0.5% for safety
 MIN_LEVERAGE = int(os.getenv('MIN_LEVERAGE', '5'))  # Default 5x minimum
-MAX_LEVERAGE = int(os.getenv('MAX_LEVERAGE', '20'))  # Default 20x maximum
-MAX_OPEN_POSITIONS = int(os.getenv('MAX_OPEN_POSITIONS', '20'))  # Default 20 positions
+MAX_LEVERAGE = int(os.getenv('MAX_LEVERAGE', '15'))  # Reduced to 15x for safety
+MAX_OPEN_POSITIONS = int(os.getenv('MAX_OPEN_POSITIONS', '15'))  # Reduced to 15 positions
 
 # Scan Parameters
 SCAN_ALL_USDT = False  # Kembali ke top volume untuk menghindari rate limit
@@ -53,8 +146,8 @@ POSITION_UPDATE_INTERVAL = 30  # 30 detik untuk update posisi & early exit monit
 EMA_FAST = 5   # Sangat cepat untuk scalping
 EMA_SLOW = 13  # Lebih cepat lagi
 RSI_LENGTH = 9   # RSI lebih sensitif
-TP_ATR_MULT = 0.8  # Target sangat dekat (scalping)
-SL_ATR_MULT = 0.6  # SL sangat ketat (scalping)
+TP_ATR_MULT = 1.2  # Improved from 0.8 - Better risk/reward ratio (2:1)
+SL_ATR_MULT = 0.6  # Keep tight SL for scalping
 PIVOT_LENGTH = 2   # Pivot sangat sensitif
 
 # Parallel Processing
@@ -203,6 +296,46 @@ def get_open_positions():
 async def execute_trade(signal):
     """Execute trade based on signal with error handling"""
     try:
+        symbol = signal['symbol']
+        direction = signal['direction']
+        
+        # CRITICAL MARGIN SAFETY CHECK - Must be first check
+        current_positions = dry_run_system.get_open_positions()
+        current_balance = dry_run_system.get_current_balance()
+        
+        # Calculate current margin usage
+        total_existing_margin = 0
+        for pos in current_positions:
+            pos_value = pos.get('position_value_usd', 0)
+            leverage = pos.get('leverage', 1)
+            if pos_value and leverage:
+                existing_margin = pos_value / leverage
+                total_existing_margin += existing_margin
+        
+        current_margin_usage = (total_existing_margin / current_balance) * 100 if current_balance > 0 else 0
+        
+        # HARD BLOCK: No new positions if margin usage > 90% (stricter limit)
+        if current_margin_usage > 90:
+            print(f"🚨🛑 MARGIN SAFETY BLOCK: Current usage {current_margin_usage:.1f}% > 90%")
+            print(f"🚨🛑 REJECTING ALL NEW TRADES - Margin: ${total_existing_margin:.2f} / Balance: ${current_balance:.2f}")
+            print(f"🚨🛑 {symbol} TRADE REJECTED - MARGIN LIMIT EXCEEDED")
+            return False
+        
+        # Calculate required margin for new position
+        position_value_usd = signal['position_value_usd']
+        leverage = signal['leverage']
+        required_margin = position_value_usd / leverage
+        
+        # Check if adding this position would exceed 90% (stricter)
+        total_margin_after = total_existing_margin + required_margin
+        margin_usage_after = (total_margin_after / current_balance) * 100
+        
+        if margin_usage_after > 90:
+            print(f"🚨🛑 MARGIN SAFETY BLOCK: Adding {symbol} would cause {margin_usage_after:.1f}% usage (>90%)")
+            print(f"🚨🛑 Current: ${total_existing_margin:.2f} + Required: ${required_margin:.2f} = ${total_margin_after:.2f}")
+            print(f"🚨🛑 {symbol} TRADE REJECTED - WOULD EXCEED MARGIN LIMIT")
+            return False
+
         # HARD STOP: Check drawdown 20%
         can_trade, reason = hard_stop_system.can_trade()
         if not can_trade:
@@ -224,8 +357,6 @@ async def execute_trade(signal):
             print(f"🛑 PROGRESSIVE RISK: {reason}")
             return False
         
-        symbol = signal['symbol']
-        direction = signal['direction']
         leverage = signal['leverage']
         qty = signal['pos_size']
         tp_price = signal['tp']
@@ -276,8 +407,14 @@ async def execute_trade(signal):
             signal['ai_entry_reasoning'] = ""
         
         if DRY_RUN:
+            # DOUBLE-CHECK: Prevent race condition duplicates
+            current_positions_recheck = dry_run_system.get_open_positions()
+            if any(pos['symbol'] == symbol for pos in current_positions_recheck):
+                print(f"⚠️  Race condition detected! {symbol} position opened by another thread, skipping...")
+                return False
+            
             # Use dry run system
-            position_id = dry_run_system.open_position(signal)
+            position_id = await dry_run_system.open_position(signal)
             print(f"🚀 [DRY RUN] Trade executed for {symbol}: {direction} {qty} @ {leverage}x")
             return True
         else:
@@ -759,10 +896,11 @@ def analyze_symbol(symbol):
         print(f"🔍 MARGIN CALC: Existing=${total_existing_margin:.2f}, Required=${required_margin:.2f}, Total=${total_margin_needed:.2f}")
         print(f"🔍 MARGIN USAGE: {margin_usage_percent:.1f}% of ${current_balance:.2f}")
         
-        # REJECT jika margin usage akan melebihi 95% (safety buffer)
-        if margin_usage_percent > 95:
-            print(f"❌ {symbol} REJECTED: Margin usage akan {margin_usage_percent:.1f}% (>95%)")
+        # REJECT jika margin usage akan melebihi 90% (stricter safety buffer)
+        if margin_usage_percent > 90:
+            print(f"❌🛑 {symbol} REJECTED: Margin usage akan {margin_usage_percent:.1f}% (>90%)")
             print(f"   Current margin: ${total_existing_margin:.2f}, Required: ${required_margin:.2f}, Balance: ${current_balance:.2f}")
+            print(f"❌🛑 SIGNAL REJECTED - MARGIN SAFETY LIMIT")
             return None
         
         print(f"🔍 Position: {pos_size:.3f} coins, Value: ${position_value_usd:.2f}")
@@ -820,17 +958,20 @@ def analyze_symbol(symbol):
 # ==================
 # TELEGRAM NOTIFICATION
 # ==================
-async def send_telegram_alert(signal, trade_executed=False):
-    """Kirim alert ke Telegram"""
+async def send_telegram_alert(signal, trade_executed=True):
+    """Kirim alert ke Telegram HANYA untuk trade yang berhasil dieksekusi"""
+    if not trade_executed:
+        print(f"⚠️ Skipping Telegram alert for {signal['symbol']} - Trade not executed")
+        return False
+        
     emoji = "📈" if signal['direction'] == "LONG" else "📉"
-    trade_status = "🚀 TRADE EXECUTED" if trade_executed else "📊 SIGNAL DETECTED"
     
-    # Base message
+    # Message for EXECUTED trades only
     message = f"""
-{emoji} <b>{signal['direction']} SETUP - {signal['symbol']}</b>
-{trade_status}
+{emoji} <b>{signal['direction']} TRADE EXECUTED - {signal['symbol']}</b>
+🚀 POSITION OPENED
 
-💰 <b>Price:</b> ${signal['close']:.6f}
+💰 <b>Entry Price:</b> ${signal['close']:.6f}
 🎯 <b>Entry Zone:</b> ${signal['entry_low']:.6f} - ${signal['entry_high']:.6f}
 🛑 <b>Stop Loss:</b> ${signal['sl']:.6f}
 ✅ <b>Take Profit:</b> ${signal['tp']:.6f}
@@ -845,19 +986,8 @@ async def send_telegram_alert(signal, trade_executed=False):
 
     # Add AI reasoning if available
     if signal.get('ai_entry_reasoning') and signal['ai_entry_reasoning'].strip():
-        # Clean HTML tags for Telegram (remove unsupported tags)
-        clean_reasoning = signal['ai_entry_reasoning'].replace('<p>', '').replace('</p>', '\n')
-        clean_reasoning = clean_reasoning.replace('<div>', '').replace('</div>', '\n')
-        clean_reasoning = clean_reasoning.replace('<span>', '').replace('</span>', '')
-        clean_reasoning = clean_reasoning.replace('<ul>', '').replace('</ul>', '')
-        clean_reasoning = clean_reasoning.replace('<li>', '• ').replace('</li>', '\n')
-        clean_reasoning = clean_reasoning.replace('<strong>', '<b>').replace('</strong>', '</b>')
-        clean_reasoning = clean_reasoning.replace('<em>', '<i>').replace('</em>', '</i>')
-        clean_reasoning = clean_reasoning.replace('<br>', '\n').replace('<br/>', '\n')
-        
-        # Remove multiple newlines
-        import re
-        clean_reasoning = re.sub(r'\n\s*\n', '\n\n', clean_reasoning.strip())
+        # Clean HTML tags for Telegram using improved function
+        clean_reasoning = clean_html_for_telegram(signal['ai_entry_reasoning'])
         
         # Limit length for Telegram
         if len(clean_reasoning) > 1500:
@@ -899,19 +1029,8 @@ async def send_ai_entry_reasoning_telegram(symbol, direction, ai_reasoning):
         emoji = "🤖" 
         direction_emoji = "📈" if direction == "LONG" else "📉"
         
-        # Clean HTML tags for Telegram (remove unsupported tags)
-        clean_reasoning = ai_reasoning.replace('<p>', '').replace('</p>', '\n')
-        clean_reasoning = clean_reasoning.replace('<div>', '').replace('</div>', '\n')
-        clean_reasoning = clean_reasoning.replace('<span>', '').replace('</span>', '')
-        clean_reasoning = clean_reasoning.replace('<ul>', '').replace('</ul>', '')
-        clean_reasoning = clean_reasoning.replace('<li>', '• ').replace('</li>', '\n')
-        clean_reasoning = clean_reasoning.replace('<strong>', '<b>').replace('</strong>', '</b>')
-        clean_reasoning = clean_reasoning.replace('<em>', '<i>').replace('</em>', '</i>')
-        clean_reasoning = clean_reasoning.replace('<br>', '\n').replace('<br/>', '\n')
-        
-        # Remove multiple newlines
-        import re
-        clean_reasoning = re.sub(r'\n\s*\n', '\n\n', clean_reasoning.strip())
+        # Clean HTML tags for Telegram using improved function
+        clean_reasoning = clean_html_for_telegram(ai_reasoning)
         
         # Limit message length (Telegram has 4096 char limit)
         if len(clean_reasoning) > 3000:
@@ -982,25 +1101,27 @@ async def send_ai_exit_reasoning_telegram(symbol, direction, exit_reason, pnl, a
 
         # Add AI reasoning if available
         if ai_reasoning and ai_reasoning.strip():
-            # Clean HTML tags for Telegram (remove unsupported tags)
-            clean_reasoning = ai_reasoning.replace('<p>', '').replace('</p>', '\n')
-            clean_reasoning = clean_reasoning.replace('<div>', '').replace('</div>', '\n')
-            clean_reasoning = clean_reasoning.replace('<span>', '').replace('</span>', '')
-            clean_reasoning = clean_reasoning.replace('<ul>', '').replace('</ul>', '')
-            clean_reasoning = clean_reasoning.replace('<li>', '• ').replace('</li>', '\n')
-            clean_reasoning = clean_reasoning.replace('<strong>', '<b>').replace('</strong>', '</b>')
-            clean_reasoning = clean_reasoning.replace('<em>', '<i>').replace('</em>', '</i>')
-            clean_reasoning = clean_reasoning.replace('<br>', '\n').replace('<br/>', '\n')
-            
-            # Remove multiple newlines
-            import re
-            clean_reasoning = re.sub(r'\n\s*\n', '\n\n', clean_reasoning.strip())
-            
-            # Limit message length
-            if len(clean_reasoning) > 2000:
-                clean_reasoning = clean_reasoning[:2000] + "...\n\n[Analisis dipotong karena panjang pesan]"
-            
-            message += f"""
+            try:
+                # Clean HTML tags for Telegram using improved function
+                clean_reasoning = clean_html_for_telegram(ai_reasoning)
+                
+                # Limit message length
+                if len(clean_reasoning) > 2000:
+                    clean_reasoning = clean_reasoning[:2000] + "...\n\n[Analisis dipotong karena panjang pesan]"
+                
+                message += f"""
+
+🧠 <b>AI REASONING:</b>
+{clean_reasoning}
+"""
+            except Exception as clean_error:
+                print(f"❌ Error cleaning AI reasoning HTML: {clean_error}")
+                # Fallback: strip all HTML tags
+                clean_reasoning = re.sub(r'<[^>]+>', '', ai_reasoning)
+                if len(clean_reasoning) > 2000:
+                    clean_reasoning = clean_reasoning[:2000] + "...\n\n[Analisis dipotong karena panjang pesan]"
+                
+                message += f"""
 
 🧠 <b>AI REASONING:</b>
 {clean_reasoning}
@@ -1014,16 +1135,39 @@ async def send_ai_exit_reasoning_telegram(symbol, direction, exit_reason, pnl, a
 """
         
         bot = Bot(token=TELEGRAM_BOT_TOKEN)
-        await bot.send_message(
-            chat_id=TELEGRAM_CHAT_ID,
-            text=message,
-            parse_mode='HTML'
-        )
-        print(f"✅ AI Exit Reasoning sent to Telegram for {symbol}")
-        return True
+        
+        # Try sending with HTML parsing first
+        try:
+            await bot.send_message(
+                chat_id=TELEGRAM_CHAT_ID,
+                text=message,
+                parse_mode='HTML'
+            )
+            print(f"✅ AI Exit Reasoning sent to Telegram for {symbol}")
+            return True
+            
+        except Exception as html_error:
+            print(f"❌ HTML parsing error: {html_error}")
+            print(f"🔍 Problematic message length: {len(message)} chars")
+            
+            # Fallback: Send without HTML parsing
+            try:
+                # Strip all HTML tags for plain text
+                plain_message = re.sub(r'<[^>]+>', '', message)
+                await bot.send_message(
+                    chat_id=TELEGRAM_CHAT_ID,
+                    text=plain_message,
+                    parse_mode=None
+                )
+                print(f"✅ AI Exit Reasoning sent to Telegram (plain text) for {symbol}")
+                return True
+                
+            except Exception as plain_error:
+                print(f"❌ Failed to send even plain text: {plain_error}")
+                return False
         
     except Exception as e:
-        print(f"❌ Error sending AI Exit Reasoning to Telegram: {e}")
+        print(f"❌ General error sending AI Exit Reasoning to Telegram: {e}")
         return False
 
 # ==================
@@ -1263,10 +1407,15 @@ async def main():
                                 print(f"   🚀 Attempting to execute trade for {signal['symbol']}...")
                                 trade_executed = await execute_trade(signal)
                             
-                            # Send Telegram alert
-                            success = await send_telegram_alert(signal, trade_executed)
-                            if success:
-                                sent_alerts[alert_key] = current_time_key
+                            # ONLY send Telegram alert if trade was actually executed
+                            if trade_executed:
+                                print(f"   📱 Sending Telegram alert for EXECUTED trade: {signal['symbol']}")
+                                success = await send_telegram_alert(signal, trade_executed=True)
+                                if success:
+                                    sent_alerts[alert_key] = current_time_key
+                            else:
+                                print(f"   ❌ Trade NOT executed for {signal['symbol']} - No Telegram alert sent")
+                            
                             await asyncio.sleep(1)  # Delay antar alert
                         else:
                             print(f"   ⏭️  Skipping {signal['symbol']} (already sent this period)")
