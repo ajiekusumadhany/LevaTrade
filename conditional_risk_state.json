@@ -1,1 +1,20 @@
-{"date": "2026-01-21", "daily_pnl": 100850.25525846348, "consecutive_losses": 1, "trades_by_session": {"DEAD_ZONE": 0, "ASIA": 0, "LONDON": 0, "NEWYORK": 5}, "ny_1pct_trades": 0, "last_trade_result": "LOSS", "last_trade_time": "2026-01-21T00:47:44.834245", "session_pnl": {"DEAD_ZONE": 0.0, "ASIA": 0.0, "LONDON": 0.0, "NEWYORK": 100850.25525846348}}
+{
+  "date": "2026-01-21",
+  "daily_pnl": 0.0,
+  "consecutive_losses": 0,
+  "trades_by_session": {
+    "DEAD_ZONE": 0,
+    "ASIA": 0,
+    "LONDON": 0,
+    "NEWYORK": 0
+  },
+  "ny_1pct_trades": 0,
+  "last_trade_result": "NONE",
+  "last_trade_time": "",
+  "session_pnl": {
+    "DEAD_ZONE": 0.0,
+    "ASIA": 0.0,
+    "LONDON": 0.0,
+    "NEWYORK": 0.0
+  }
+}

@@ -19,7 +19,11 @@ from indicator_analysis_system import get_indicator_analyzer
 class DashboardAIChat:
     def __init__(self, socketio):
         self.socketio = socketio
-        self.gemini_analyst = get_gemini_analyst()
+        try:
+            self.gemini_analyst = get_gemini_analyst()
+        except Exception as e:
+            print(f"⚠️ Gemini AI not available: {e}")
+            self.gemini_analyst = None
         self.session_analyzer = get_session_analyzer()
         self.indicator_analyzer = get_indicator_analyzer()
         

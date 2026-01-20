@@ -47,6 +47,7 @@ class IndicatorAnalysisSystem:
         if indicator_name == 'ema_fast_above_slow':
             if direction == 'LONG':
                 return {
+                    'name': indicator_name,
                     'passed': bool(value),
                     'description': 'EMA Fast > EMA Slow',
                     'actual': 'True' if value else 'False',
@@ -54,6 +55,7 @@ class IndicatorAnalysisSystem:
                 }
             else:  # SHORT
                 return {
+                    'name': indicator_name,
                     'passed': not bool(value),
                     'description': 'EMA Fast < EMA Slow',
                     'actual': 'False' if value else 'True',
@@ -63,6 +65,7 @@ class IndicatorAnalysisSystem:
         elif indicator_name == 'macd_bullish':
             if direction == 'LONG':
                 return {
+                    'name': indicator_name,
                     'passed': bool(value),
                     'description': 'MACD Bullish Signal',
                     'actual': 'Bullish' if value else 'Bearish',
@@ -70,6 +73,7 @@ class IndicatorAnalysisSystem:
                 }
             else:  # SHORT
                 return {
+                    'name': indicator_name,
                     'passed': not bool(value),
                     'description': 'MACD Bearish Signal',
                     'actual': 'Bearish' if not value else 'Bullish',
@@ -79,6 +83,7 @@ class IndicatorAnalysisSystem:
         elif indicator_name == 'rsi_oversold':
             if direction == 'LONG':
                 return {
+                    'name': indicator_name,
                     'passed': bool(value),
                     'description': 'RSI Oversold (Buy Signal)',
                     'actual': 'Oversold' if value else 'Not Oversold',
@@ -86,6 +91,7 @@ class IndicatorAnalysisSystem:
                 }
             else:  # SHORT
                 return {
+                    'name': indicator_name,
                     'passed': False,  # Oversold tidak mendukung SHORT
                     'description': 'RSI Oversold (Tidak untuk SHORT)',
                     'actual': 'Oversold' if value else 'Not Oversold',
@@ -95,6 +101,7 @@ class IndicatorAnalysisSystem:
         elif indicator_name == 'rsi_overbought':
             if direction == 'LONG':
                 return {
+                    'name': indicator_name,
                     'passed': False,  # Overbought tidak mendukung LONG
                     'description': 'RSI Overbought (Tidak untuk LONG)',
                     'actual': 'Overbought' if value else 'Not Overbought',
@@ -102,6 +109,7 @@ class IndicatorAnalysisSystem:
                 }
             else:  # SHORT
                 return {
+                    'name': indicator_name,
                     'passed': bool(value),
                     'description': 'RSI Overbought (Sell Signal)',
                     'actual': 'Overbought' if value else 'Not Overbought',
@@ -111,6 +119,7 @@ class IndicatorAnalysisSystem:
         elif indicator_name == 'rsi_neutral':
             # RSI neutral bisa mendukung kedua direction tergantung konteks
             return {
+                'name': indicator_name,
                 'passed': bool(value),
                 'description': 'RSI Neutral Zone',
                 'actual': 'Neutral' if value else 'Extreme',
@@ -119,6 +128,7 @@ class IndicatorAnalysisSystem:
         
         elif indicator_name == 'volume_confirmation':
             return {
+                'name': indicator_name,
                 'passed': bool(value),
                 'description': 'Volume Confirmation',
                 'actual': 'High Volume' if value else 'Low Volume',
@@ -127,6 +137,7 @@ class IndicatorAnalysisSystem:
         
         elif indicator_name == 'volatility_confirmation':
             return {
+                'name': indicator_name,
                 'passed': bool(value),
                 'description': 'Volatility Confirmation',
                 'actual': 'High Volatility' if value else 'Low Volatility',
@@ -136,6 +147,7 @@ class IndicatorAnalysisSystem:
         elif indicator_name == 'price_near_support':
             if direction == 'LONG':
                 return {
+                    'name': indicator_name,
                     'passed': bool(value),
                     'description': 'Price Near Support Level',
                     'actual': 'Near Support' if value else 'Away from Support',
@@ -143,6 +155,7 @@ class IndicatorAnalysisSystem:
                 }
             else:  # SHORT
                 return {
+                    'name': indicator_name,
                     'passed': False,  # Near support tidak mendukung SHORT
                     'description': 'Price Near Support (Tidak untuk SHORT)',
                     'actual': 'Near Support' if value else 'Away from Support',
@@ -152,6 +165,7 @@ class IndicatorAnalysisSystem:
         elif indicator_name == 'price_near_resistance':
             if direction == 'LONG':
                 return {
+                    'name': indicator_name,
                     'passed': False,  # Near resistance tidak mendukung LONG
                     'description': 'Price Near Resistance (Tidak untuk LONG)',
                     'actual': 'Near Resistance' if value else 'Away from Resistance',
@@ -159,6 +173,7 @@ class IndicatorAnalysisSystem:
                 }
             else:  # SHORT
                 return {
+                    'name': indicator_name,
                     'passed': bool(value),
                     'description': 'Price Near Resistance Level',
                     'actual': 'Near Resistance' if value else 'Away from Resistance',
@@ -167,6 +182,7 @@ class IndicatorAnalysisSystem:
         
         elif indicator_name == 'trend_alignment':
             return {
+                'name': indicator_name,
                 'passed': bool(value),
                 'description': 'Trend Alignment',
                 'actual': 'Aligned' if value else 'Not Aligned',
@@ -175,6 +191,7 @@ class IndicatorAnalysisSystem:
         
         elif indicator_name == 'momentum_confirmation':
             return {
+                'name': indicator_name,
                 'passed': bool(value),
                 'description': 'Momentum Confirmation',
                 'actual': 'Strong Momentum' if value else 'Weak Momentum',
@@ -188,6 +205,7 @@ class IndicatorAnalysisSystem:
                 # RSI < 40 bagus untuk LONG (oversold)
                 passed = rsi_value < 40
                 return {
+                    'name': indicator_name,
                     'passed': passed,
                     'description': f'RSI Level ({rsi_value:.1f})',
                     'actual': f'{rsi_value:.1f}',
@@ -197,6 +215,7 @@ class IndicatorAnalysisSystem:
                 # RSI > 60 bagus untuk SHORT (overbought)
                 passed = rsi_value > 60
                 return {
+                    'name': indicator_name,
                     'passed': passed,
                     'description': f'RSI Level ({rsi_value:.1f})',
                     'actual': f'{rsi_value:.1f}',
@@ -208,6 +227,7 @@ class IndicatorAnalysisSystem:
             # ATR > 0 menunjukkan volatilitas yang cukup
             passed = atr_value > 0
             return {
+                'name': indicator_name,
                 'passed': passed,
                 'description': f'ATR Value ({atr_value:.6f})',
                 'actual': f'{atr_value:.6f}',
@@ -217,6 +237,7 @@ class IndicatorAnalysisSystem:
         elif indicator_name == 'ema_fast_value':
             ema_fast = float(value) if value else 0
             return {
+                'name': indicator_name,
                 'passed': ema_fast > 0,
                 'description': f'EMA Fast ({ema_fast:.6f})',
                 'actual': f'{ema_fast:.6f}',
@@ -226,6 +247,7 @@ class IndicatorAnalysisSystem:
         elif indicator_name == 'ema_slow_value':
             ema_slow = float(value) if value else 0
             return {
+                'name': indicator_name,
                 'passed': ema_slow > 0,
                 'description': f'EMA Slow ({ema_slow:.6f})',
                 'actual': f'{ema_slow:.6f}',
@@ -238,6 +260,7 @@ class IndicatorAnalysisSystem:
                 # MACD line > 0 bagus untuk LONG
                 passed = macd_line > 0
                 return {
+                    'name': indicator_name,
                     'passed': passed,
                     'description': f'MACD Line ({macd_line:.6f})',
                     'actual': f'{macd_line:.6f}',
@@ -247,6 +270,7 @@ class IndicatorAnalysisSystem:
                 # MACD line < 0 bagus untuk SHORT
                 passed = macd_line < 0
                 return {
+                    'name': indicator_name,
                     'passed': passed,
                     'description': f'MACD Line ({macd_line:.6f})',
                     'actual': f'{macd_line:.6f}',
@@ -256,6 +280,7 @@ class IndicatorAnalysisSystem:
         elif indicator_name == 'signal_line_value':
             signal_line = float(value) if value else 0
             return {
+                'name': indicator_name,
                 'passed': True,  # Signal line selalu valid
                 'description': f'Signal Line ({signal_line:.6f})',
                 'actual': f'{signal_line:.6f}',
@@ -265,6 +290,7 @@ class IndicatorAnalysisSystem:
         elif indicator_name == 'support_resistance':
             sr_level = float(value) if value else 0
             return {
+                'name': indicator_name,
                 'passed': sr_level > 0,
                 'description': f'Support/Resistance ({sr_level:.6f})',
                 'actual': f'{sr_level:.6f}',
@@ -276,6 +302,7 @@ class IndicatorAnalysisSystem:
             # Distance yang kecil menunjukkan price dekat dengan level
             passed = abs(distance) < 0.02  # 2% threshold
             return {
+                'name': indicator_name,
                 'passed': passed,
                 'description': f'Price Distance from Level ({distance:.4f})',
                 'actual': f'{distance:.4f}',
@@ -284,6 +311,7 @@ class IndicatorAnalysisSystem:
         
         # Unknown indicator
         return {
+            'name': indicator_name,
             'passed': False,
             'description': f'Unknown Indicator ({indicator_name})',
             'actual': str(value),
