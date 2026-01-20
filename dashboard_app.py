@@ -55,6 +55,78 @@ def get_notifications():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
+@app.route('/api/notifications/clear', methods=['POST'])
+def clear_notifications():
+    """API endpoint untuk membersihkan semua notifikasi"""
+    try:
+        from notification_system import mark_notifications_as_read
+        mark_notifications_as_read()
+        return jsonify({'success': True, 'message': 'Notifications cleared'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/trading/status')
+def get_trading_status():
+    """API endpoint untuk mendapatkan status trading"""
+    try:
+        from trading_control_system import get_trading_status
+        status = get_trading_status()
+        return jsonify({'success': True, 'status': status})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/trading/start', methods=['POST'])
+def start_trading_api():
+    """API endpoint untuk start trading"""
+    try:
+        from trading_control_system import start_trading
+        result = start_trading('dashboard')
+        
+        # Send notification via Telegram
+        try:
+            from telegram import Bot
+            bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
+            chat_id = os.getenv('TELEGRAM_CHAT_ID')
+            if bot_token and chat_id:
+                bot = Bot(token=bot_token)
+                bot.send_message(
+                    chat_id=chat_id,
+                    text="✅ <b>Trading STARTED</b>\n📱 Controlled from Dashboard\n🤖 Bot will resume taking new positions",
+                    parse_mode='HTML'
+                )
+        except Exception as telegram_error:
+            print(f"⚠️ Telegram notification failed: {telegram_error}")
+        
+        return jsonify({'success': True, 'message': 'Trading started'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/trading/stop', methods=['POST'])
+def stop_trading_api():
+    """API endpoint untuk stop trading"""
+    try:
+        from trading_control_system import stop_trading
+        result = stop_trading('dashboard')
+        
+        # Send notification via Telegram
+        try:
+            from telegram import Bot
+            bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
+            chat_id = os.getenv('TELEGRAM_CHAT_ID')
+            if bot_token and chat_id:
+                bot = Bot(token=bot_token)
+                bot.send_message(
+                    chat_id=chat_id,
+                    text="🛑 <b>Trading STOPPED</b>\n📱 Controlled from Dashboard\n⏸️ Bot will not take new positions\n📊 Existing positions will continue to be monitored",
+                    parse_mode='HTML'
+                )
+        except Exception as telegram_error:
+            print(f"⚠️ Telegram notification failed: {telegram_error}")
+        
+        return jsonify({'success': True, 'message': 'Trading stopped'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
 @app.route('/api/positions')
 def get_positions():
     """API endpoint untuk open positions dengan percentage PnL"""
@@ -254,16 +326,53 @@ def get_performance():
     
     return jsonify(metrics)
 
+@app.route('/api/session-status')
+def get_session_status_api():
+    """API endpoint untuk session status dan conditional risk info"""
+    try:
+        from session_management_system import get_session_status
+        from conditional_risk_system import get_risk_status
+        
+        session_status = get_session_status()
+        risk_status = get_risk_status()
+        
+        return jsonify({
+            'success': True,
+            'session_status': session_status,
+            'risk_status': risk_status
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/conditional-risk')
+def get_conditional_risk_api():
+    """API endpoint untuk conditional risk details"""
+    try:
+        from conditional_risk_system import get_risk_status
+        
+        risk_status = get_risk_status()
+        
+        return jsonify({
+            'success': True,
+            'risk_status': risk_status
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
 @app.route('/api/session-performance')
 def get_session_performance():
     """API endpoint untuk session performance analysis"""
     mode = request.args.get('mode', 'dry-run').replace('-', '_')
     days = int(request.args.get('days', 30))
     
-    session_analyzer = get_session_analyzer()
-    performance = session_analyzer.get_session_performance(mode, days)
-    
-    return jsonify(performance)
+    try:
+        from trading_session_system import get_session_analyzer
+        session_analyzer = get_session_analyzer()
+        performance = session_analyzer.get_session_performance(mode, days)
+        
+        return jsonify(performance)
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/session-comparison')
 def get_session_comparison():
@@ -271,10 +380,14 @@ def get_session_comparison():
     mode = request.args.get('mode', 'dry-run').replace('-', '_')
     days = int(request.args.get('days', 30))
     
-    session_analyzer = get_session_analyzer()
-    comparison = session_analyzer.get_session_comparison(mode, days)
-    
-    return jsonify(comparison)
+    try:
+        from trading_session_system import get_session_analyzer
+        session_analyzer = get_session_analyzer()
+        comparison = session_analyzer.get_session_comparison(mode, days)
+        
+        return jsonify(comparison)
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/best-worst-sessions')
 def get_best_worst_sessions():
@@ -282,10 +395,14 @@ def get_best_worst_sessions():
     mode = request.args.get('mode', 'dry-run').replace('-', '_')
     days = int(request.args.get('days', 30))
     
-    session_analyzer = get_session_analyzer()
-    best_worst = session_analyzer.get_best_worst_sessions(mode, days)
-    
-    return jsonify(best_worst)
+    try:
+        from trading_session_system import get_session_analyzer
+        session_analyzer = get_session_analyzer()
+        best_worst = session_analyzer.get_best_worst_sessions(mode, days)
+        
+        return jsonify(best_worst)
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/indicator-performance')
 def get_indicator_performance():

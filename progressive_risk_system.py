@@ -3,7 +3,6 @@ Progressive Risk System - Risk management bertahap untuk proteksi mental
 """
 from datetime import datetime
 from dry_run_system import dry_run_system
-from daily_stop_system import daily_stop_system
 
 class ProgressiveRiskSystem:
     def __init__(self):

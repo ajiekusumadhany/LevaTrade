@@ -40,7 +40,7 @@ class TradingSessionAnalyzer:
                 'color': '🟩',
                 'description': 'European markets active'
             },
-            'NEW_YORK': {
+            'NEWYORK': {
                 'name': 'New York Session',
                 'time_range': '20:00 - 02:00 WIB',
                 'start_hour': 20,
@@ -71,14 +71,21 @@ class TradingSessionAnalyzer:
             hour = wib_time.hour
             
             # Determine session based on hour (WIB)
-            if 2 <= hour < 7:
+            # NEWYORK: 20:00-02:00 (spans midnight)
+            # DEAD_ZONE: 02:00-07:00  
+            # ASIA: 07:00-14:00
+            # LONDON: 14:00-20:00
+            
+            if 0 <= hour < 2:  # 00:00-01:59 (NEWYORK continues from previous day)
+                return 'NEWYORK'
+            elif 2 <= hour < 7:  # 02:00-06:59 (DEAD_ZONE)
                 return 'DEAD_ZONE'
-            elif 7 <= hour < 14:
+            elif 7 <= hour < 14:  # 07:00-13:59 (ASIA)
                 return 'ASIA'
-            elif 14 <= hour < 20:
+            elif 14 <= hour < 20:  # 14:00-19:59 (LONDON)
                 return 'LONDON'
-            else:  # 20-24 or 0-2 (New York session spans midnight)
-                return 'NEW_YORK'
+            else:  # 20:00-23:59 (NEWYORK starts)
+                return 'NEWYORK'
                 
         except Exception as e:
             print(f"Error parsing timestamp {timestamp_str}: {e}")

@@ -220,16 +220,16 @@ class DryRunSystem:
                 cursor.execute('''
                     INSERT INTO open_positions 
                     (id, symbol, direction, entry_price, quantity, leverage, tp_price, sl_price, 
-                     entry_time, current_price, indicators, position_value_usd, ai_entry_reasoning,
+                     entry_time, current_price, unrealized_pnl, indicators, position_value_usd, ai_entry_reasoning,
                      market_cap, market_cap_rank, total_volume_24h, circulating_supply, total_supply, max_supply,
                      price_change_24h, price_change_percentage_24h, price_change_percentage_7d, price_change_percentage_30d,
                      ath, ath_change_percentage, atl, atl_change_percentage, bybit_volume_24h, bybit_turnover_24h,
                      liquidity_score, volatility_score, market_dominance, market_cap_category, volume_category, market_data_timestamp, trading_session)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     position_id, signal['symbol'], signal['direction'], signal['close'],
                     signal['pos_size'], signal['leverage'], signal['tp'], signal['sl'],
-                    datetime.now().isoformat(), signal['close'], json.dumps(indicators),
+                    datetime.now().isoformat(), signal['close'], 0.0, json.dumps(indicators),
                     signal['position_value_usd'], signal.get('ai_entry_reasoning', ''),
                     # Market data
                     market_data.get('market_cap', 0),
@@ -307,17 +307,29 @@ class DryRunSystem:
                 
                 for pos in positions:
                     # Handle different database schemas (old vs new with market data)
-                    if len(pos) >= 36:  # New schema with market data (14 original + 22 market data columns)
-                        (pos_id, symbol, direction, entry_price, quantity, leverage, 
-                         tp_price, sl_price, entry_time, _, unrealized_pnl, indicators, 
-                         position_value_usd, ai_entry_reasoning) = pos[:14]  # Take only first 14 columns
+                    if len(pos) >= 36:  # New schema with market data (37 total columns)
+                        # Extract only the essential columns we need for position updates
+                        pos_id = pos[0]
+                        symbol = pos[1] 
+                        direction = pos[2]
+                        entry_price = pos[3]
+                        quantity = pos[4]
+                        leverage = pos[5]
+                        tp_price = pos[6]
+                        sl_price = pos[7]
+                        entry_time = pos[8]
+                        current_price_db = pos[9]
+                        unrealized_pnl = pos[10]
+                        indicators = pos[11]
+                        position_value_usd = pos[12]
+                        ai_entry_reasoning = pos[13] if len(pos) > 13 else ""
                     elif len(pos) >= 14:  # Old schema with AI reasoning but no market data
                         (pos_id, symbol, direction, entry_price, quantity, leverage, 
-                         tp_price, sl_price, entry_time, _, unrealized_pnl, indicators, 
+                         tp_price, sl_price, entry_time, current_price_db, unrealized_pnl, indicators, 
                          position_value_usd, ai_entry_reasoning) = pos
                     else:  # Very old schema without AI reasoning and market data
                         (pos_id, symbol, direction, entry_price, quantity, leverage, 
-                         tp_price, sl_price, entry_time, _, unrealized_pnl, indicators, position_value_usd) = pos
+                         tp_price, sl_price, entry_time, current_price_db, unrealized_pnl, indicators, position_value_usd) = pos
                         ai_entry_reasoning = ""
                     
                     if symbol in current_prices:
@@ -512,6 +524,35 @@ class DryRunSystem:
             
             print(f"✅ [DRY RUN] Closed {direction} {symbol} - {exit_reason} - PnL: ${pnl:.2f} ({pnl_percentage:.2f}%)")
             
+            # Record trade result for conditional risk system
+            try:
+                from conditional_risk_system import record_trade_result
+                from session_management_system import get_current_session_parameters
+                
+                # Get current session (when trade is closing, not when it was opened)
+                current_session_params = get_current_session_parameters()
+                session = current_session_params['session']
+                
+                # Fix session name mapping for conditional risk system
+                session_mapping = {
+                    'DEAD_ZONE': 'DEAD_ZONE',
+                    'ASIA': 'ASIA', 
+                    'LONDON': 'LONDON',
+                    'NEWYORK': 'NEWYORK',  # Map NEW_YORK to NEWYORK
+                    'NEW_YORK': 'NEWYORK'  # Handle both variants
+                }
+                
+                mapped_session = session_mapping.get(session, session)
+                
+                # Calculate risk percentage used (approximate from position size)
+                # This is an approximation since we don't store the exact risk used
+                risk_used = (margin_used / self.get_current_balance()) * 100 if self.get_current_balance() > 0 else 0.5
+                
+                record_trade_result(mapped_session, pnl, risk_used)
+                print(f"📊 Trade result recorded: {mapped_session} session, PnL=${pnl:.2f}, Risk≈{risk_used:.1f}%")
+            except Exception as e:
+                print(f"⚠️ Failed to record trade result for conditional risk: {e}")
+            
             # Send notification using file-based system
             try:
                 from notification_system import send_notification
@@ -576,7 +617,7 @@ class DryRunSystem:
             margin_used = position_value / leverage if leverage > 0 else position_value
             pnl_percentage = (realized_pnl / margin_used) * 100 if margin_used > 0 else 0
             
-            # Prepare position data for AI analysis
+            # Prepare position data for AI analysis with ALL stored market data
             position_data = {
                 'symbol': pos[1],  # symbol
                 'direction': pos[2],  # direction
@@ -585,7 +626,32 @@ class DryRunSystem:
                 'entry_time': pos[8],  # entry_time
                 'realized_pnl': realized_pnl,
                 'pnl_percentage': pnl_percentage,
-                'entry_indicators': json.loads(pos[11]) if pos[11] else {}  # indicators
+                'entry_indicators': json.loads(pos[11]) if pos[11] else {},  # indicators
+                
+                # CRITICAL: Add all market data that was stored at entry
+                'market_cap': pos[14] if len(pos) > 14 else 0,
+                'market_cap_rank': pos[15] if len(pos) > 15 else 0,
+                'total_volume_24h': pos[16] if len(pos) > 16 else 0,
+                'circulating_supply': pos[17] if len(pos) > 17 else 0,
+                'total_supply': pos[18] if len(pos) > 18 else 0,
+                'max_supply': pos[19] if len(pos) > 19 else 0,
+                'price_change_24h': pos[20] if len(pos) > 20 else 0,
+                'price_change_percentage_24h': pos[21] if len(pos) > 21 else 0,
+                'price_change_percentage_7d': pos[22] if len(pos) > 22 else 0,
+                'price_change_percentage_30d': pos[23] if len(pos) > 23 else 0,
+                'ath': pos[24] if len(pos) > 24 else 0,
+                'ath_change_percentage': pos[25] if len(pos) > 25 else 0,
+                'atl': pos[26] if len(pos) > 26 else 0,
+                'atl_change_percentage': pos[27] if len(pos) > 27 else 0,
+                'bybit_volume_24h': pos[28] if len(pos) > 28 else 0,
+                'bybit_turnover_24h': pos[29] if len(pos) > 29 else 0,
+                'liquidity_score': pos[30] if len(pos) > 30 else 0,
+                'volatility_score': pos[31] if len(pos) > 31 else 0,
+                'market_dominance': pos[32] if len(pos) > 32 else 0,
+                'market_cap_category': pos[33] if len(pos) > 33 else '',
+                'volume_category': pos[34] if len(pos) > 34 else '',
+                'market_data_timestamp': pos[35] if len(pos) > 35 else '',
+                'trading_session': pos[36] if len(pos) > 36 else 'UNKNOWN'
             }
             
             # Generate AI exit reasoning

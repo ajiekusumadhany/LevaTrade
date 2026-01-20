@@ -1,0 +1,18 @@
+{
+  "base_risk_percent": 0.5,
+  "max_positions": 8,
+  "max_correlated_positions": 3,
+  "max_total_risk": 3.0,
+  "max_group_risk": 2.0,
+  "enable_psychological_protection": true,
+  "enable_correlation_protection": true,
+  "enable_regime_detection": true,
+  "min_market_cap": 500000000,
+  "max_spread": 0.002,
+  "session_weights": {
+    "dead_zone": 1.0,
+    "asia": 0.8,
+    "london": 1.2,
+    "newyork": 1.0
+  }
+}

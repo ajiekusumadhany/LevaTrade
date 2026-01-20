@@ -211,11 +211,28 @@ class GeminiMarketAnalyst:
                 'price_distance_from_level': signal_data.get('price_distance_from_level', 0)
             }
             
-            # Analyze indicators performance
-            # indicator_analysis = await self._get_indicator_analysis(signal_data['symbol'], signal_data['direction'])
+            # CRITICAL: Analyze which indicators passed vs failed for this direction
+            from indicator_analysis_system import IndicatorAnalysisSystem
+            analyzer = IndicatorAnalysisSystem()
+            passed_indicators, failed_indicators = analyzer.analyze_indicators(indicators, signal_data['direction'])
             
             # Get market data analysis
             market_analysis = await self._get_market_data_analysis(signal_data['symbol'], signal_data['direction'])
+            
+            # Format passed and failed indicators for AI
+            passed_list = []
+            failed_list = []
+            
+            for indicator in passed_indicators:
+                passed_list.append(f"✅ {indicator['description']}: {indicator['actual']} (mendukung {signal_data['direction']})")
+            
+            for indicator in failed_indicators:
+                failed_list.append(f"❌ {indicator['description']}: {indicator['actual']} (tidak mendukung {signal_data['direction']})")
+            
+            passed_text = "\n".join(passed_list) if passed_list else "Tidak ada indikator yang passed"
+            failed_text = "\n".join(failed_list) if failed_list else "Tidak ada indikator yang failed"
+            
+            pass_rate = (len(passed_indicators) / (len(passed_indicators) + len(failed_indicators)) * 100) if (len(passed_indicators) + len(failed_indicators)) > 0 else 0
             
             # Prepare prompt for entry reasoning
             prompt = f"""
@@ -230,8 +247,17 @@ class GeminiMarketAnalyst:
             - Ukuran Posisi: {signal_data.get('pos_size', 'N/A')}
             - Leverage: {signal_data.get('leverage', 'N/A')}x
             
-            INDIKATOR TEKNIKAL:
-            {self._format_indicators(indicators)}
+            ANALISIS INDIKATOR TEKNIKAL:
+            Pass Rate: {pass_rate:.1f}% ({len(passed_indicators)} passed, {len(failed_indicators)} failed)
+            
+            INDIKATOR YANG MENDUKUNG {signal_data['direction']} (PASSED):
+            {passed_text}
+            
+            INDIKATOR YANG TIDAK MENDUKUNG {signal_data['direction']} (FAILED):
+            {failed_text}
+            
+            NILAI INDIKATOR:
+            {self._format_numerical_indicators(indicators)}
             
             ANALISIS MARKET DATA:
             {market_analysis}
@@ -240,19 +266,19 @@ class GeminiMarketAnalyst:
             {market_data}
             
             Berikan analisis dalam bahasa Indonesia yang mencakup:<br><br>
-            <b>1. Alasan Entry:</b> Mengapa ini titik entry yang bagus<br><br>
-            <b>2. Analisis Teknikal:</b> Indikator kunci yang mendukung trade ini<br><br>
+            <b>1. Alasan Entry:</b> Mengapa ini titik entry yang bagus berdasarkan indikator yang PASSED<br><br>
+            <b>2. Analisis Teknikal:</b> Fokus pada indikator yang benar-benar mendukung {signal_data['direction']} (yang PASSED)<br><br>
             <b>3. Konteks Pasar:</b> Kondisi pasar saat ini dan sentimen<br><br>
-            <b>4. Penilaian Risiko:</b> Potensi risiko dan mitigasinya<br><br>
-            <b>5. Ekspektasi Hasil:</b> Target harga dan timeline
+            <b>4. Penilaian Risiko:</b> Risiko dari indikator yang FAILED dan mitigasinya<br><br>
+            <b>5. Ekspektasi Hasil:</b> Target harga dan timeline berdasarkan kekuatan sinyal
             
             PENTING:
             - Gunakan bahasa Indonesia yang jelas dan ringkas (maksimal 300 kata)
             - JANGAN gunakan format markdown (**, *, #, dll)
             - Gunakan HTML formatting untuk keterbacaan: <b>bold</b>, <i>italic</i>, <br> untuk line break
-            - Format output dengan HTML tags yang akan ditampilkan dengan baik di dashboard
-            - Contoh: <b>Alasan Entry:</b> Kondisi bullish terlihat dari...<br><br><b>Analisis Teknikal:</b> EMA menunjukkan...
-            - Fokus pada analisis real-time, bukan data historis
+            - Fokus HANYA pada indikator yang PASSED sebagai alasan utama entry
+            - Sebutkan indikator yang FAILED sebagai faktor risiko
+            - Jangan salah interpretasi - gunakan data passed/failed yang sudah dianalisis
             """
             
             response = await self._generate_response(prompt)
@@ -260,7 +286,8 @@ class GeminiMarketAnalyst:
             
         except Exception as e:
             print(f"❌ Error generating entry reasoning: {e}")
-            return f"Analisis entry tidak tersedia karena error: {str(e)}"
+            # CRITICAL: Re-raise error - entry reasoning is mandatory
+            raise Exception(f"Entry reasoning failed: {e}")
     
     async def _get_indicator_analysis(self, symbol: str, direction: str) -> str:
         """Get simple indicator analysis without database queries"""
@@ -618,6 +645,41 @@ class GeminiMarketAnalyst:
             entry_time = position_data['entry_time']
             entry_indicators = position_data.get('entry_indicators', {})
             
+            # Extract market data saat entry (if available)
+            entry_market_data = {
+                'market_cap': position_data.get('market_cap', 0),
+                'market_cap_category': position_data.get('market_cap_category', 'Unknown'),
+                'volume_24h': position_data.get('total_volume_24h', 0),
+                'volume_category': position_data.get('volume_category', 'Unknown'),
+                'price_change_24h': position_data.get('price_change_percentage_24h', 0),
+                'price_change_7d': position_data.get('price_change_percentage_7d', 0),
+                'liquidity_score': position_data.get('liquidity_score', 0),
+                'volatility_score': position_data.get('volatility_score', 0),
+                'market_dominance': position_data.get('market_dominance', 0),
+                'bybit_volume_24h': position_data.get('bybit_volume_24h', 0),
+                'bybit_turnover_24h': position_data.get('bybit_turnover_24h', 0)
+            }
+            
+            # CRITICAL: Analyze which indicators passed vs failed at entry
+            passed_at_entry = []
+            failed_at_entry = []
+            
+            if entry_indicators:
+                from indicator_analysis_system import IndicatorAnalysisSystem
+                analyzer = IndicatorAnalysisSystem()
+                passed_indicators, failed_indicators = analyzer.analyze_indicators(entry_indicators, direction)
+                
+                for indicator in passed_indicators:
+                    passed_at_entry.append(f"✅ {indicator['description']}: {indicator['actual']} (mendukung {direction})")
+                
+                for indicator in failed_indicators:
+                    failed_at_entry.append(f"❌ {indicator['description']}: {indicator['actual']} (tidak mendukung {direction})")
+            
+            passed_text = "\n".join(passed_at_entry) if passed_at_entry else "Data indikator entry tidak tersedia"
+            failed_text = "\n".join(failed_at_entry) if failed_at_entry else "Data indikator entry tidak tersedia"
+            
+            entry_pass_rate = (len(passed_at_entry) / (len(passed_at_entry) + len(failed_at_entry)) * 100) if (len(passed_at_entry) + len(failed_at_entry)) > 0 else 0
+            
             # Calculate price movement
             price_change = ((exit_price - entry_price) / entry_price) * 100
             if direction == 'SHORT':
@@ -639,9 +701,6 @@ class GeminiMarketAnalyst:
             # Get comprehensive market analysis
             market_analysis = await self._get_comprehensive_market_analysis(symbol, entry_time)
             
-            # Analyze indicators at entry vs current
-            indicator_analysis = self._analyze_indicator_changes(entry_indicators, symbol)
-            
             # Get current technical indicators
             current_technical = await self._get_current_technical_analysis(symbol)
             
@@ -659,42 +718,60 @@ class GeminiMarketAnalyst:
             - PnL: ${pnl:.2f} ({pnl_percentage:.2f}%)
             - Pergerakan Harga: {price_change:.2f}%
             
-            WAJIB GUNAKAN DATA BERIKUT DALAM ANALISIS:
+            ANALISIS INDIKATOR SAAT ENTRY:
+            Pass Rate Entry: {entry_pass_rate:.1f}% ({len(passed_at_entry)} passed, {len(failed_at_entry)} failed)
             
+            INDIKATOR YANG MENDUKUNG {direction} SAAT ENTRY (PASSED):
+            {passed_text}
+            
+            INDIKATOR YANG TIDAK MENDUKUNG {direction} SAAT ENTRY (FAILED):
+            {failed_text}
+            
+            DATA MARKET SAAT ENTRY:
+            - Market Cap: ${entry_market_data['market_cap']:,.0f} ({entry_market_data['market_cap_category']})
+            - Volume 24h: ${entry_market_data['volume_24h']:,.0f} ({entry_market_data['volume_category']})
+            - Perubahan 24h saat entry: {entry_market_data['price_change_24h']:.2f}%
+            - Perubahan 7d saat entry: {entry_market_data['price_change_7d']:.2f}%
+            - Bybit Volume 24h: ${entry_market_data['bybit_volume_24h']:,.0f}
+            - Bybit Turnover 24h: ${entry_market_data['bybit_turnover_24h']:,.0f}
+            - Liquidity Score: {entry_market_data['liquidity_score']:.1f}
+            - Volatility Score: {entry_market_data['volatility_score']:.1f}
+            - Market Dominance: {entry_market_data['market_dominance']:.1f}%
+            
+            DATA MARKET SAAT EXIT:
             {market_analysis}
             
-            {indicator_analysis}
-            
+            KONDISI TEKNIKAL SAAT EXIT:
             {current_technical}
             
-            Berikan analisis komprehensif dalam format HTML yang WAJIB mencakup data di atas:
+            Berikan analisis komprehensif dalam format HTML:
             
             <b>📊 Ringkasan Eksekusi:</b><br>
-            Jelaskan secara detail hasil trade {symbol} {direction} yang ditutup dengan {exit_desc}. Analisis pergerakan harga {price_change:.2f}% dan dampaknya terhadap PnL {pnl_percentage:.2f}%. WAJIB sebutkan data perubahan 24h dan volume dari data market yang diberikan.<br><br>
+            Posisi trading {symbol} {direction} berhasil ditutup dengan {exit_desc}. Analisis pergerakan harga {price_change:.2f}% dan dampaknya terhadap PnL {pnl_percentage:.2f}%. WAJIB sebutkan data perubahan 24h dan volume dari data market yang diberikan.<br><br>
             
             <b>📈 Analisis Perubahan Market:</b><br>
-            WAJIB gunakan data market yang diberikan di atas. Bandingkan kondisi market saat entry vs exit. Sebutkan secara spesifik perubahan 24h, volume, open interest, dan funding rate. Bagaimana perubahan ini mempengaruhi hasil trade?<br><br>
+            Bandingkan kondisi market saat entry vs exit berdasarkan data yang diberikan. Data market saat entry sudah tersedia (market cap, volume, perubahan 24h/7d, liquidity score, dll). Sebutkan secara spesifik perbandingan perubahan 24h saat entry vs exit, volume saat entry vs exit, dan bagaimana perubahan dalam 1 jam terakhir mempengaruhi hasil trade. Fokus pada momentum jangka pendek yang relevan untuk scalping.<br><br>
             
             <b>🔍 Evaluasi Indikator Teknikal:</b><br>
-            WAJIB gunakan data indikator yang diberikan. Analisis perubahan indikator dari saat entry hingga exit. Bagaimana EMA, RSI, MACD, dan indikator lainnya berubah? Apakah sinyal entry masih valid?<br><br>
+            Pada saat entry, sinyal teknikal menunjukkan kondisi dengan {entry_pass_rate:.1f}% pass rate. {len(passed_at_entry)} indikator mendukung {direction} sementara {len(failed_at_entry)} tidak mendukung. Analisis bagaimana kondisi teknikal berubah dari entry hingga exit berdasarkan data yang diberikan.<br><br>
             
             <b>⚡ Faktor Volatilitas dan Timing:</b><br>
-            WAJIB gunakan data volatilitas dari analisis teknikal. Evaluasi tingkat volatilitas selama posisi terbuka. Bagaimana volatilitas dan timing mempengaruhi hasil?<br><br>
+            Evaluasi tingkat volatilitas dalam 1 jam terakhir berdasarkan data teknikal. Bagaimana volatilitas dan timing dalam timeframe pendek mempengaruhi hasil dengan durasi {duration}? Analisis momentum jangka pendek dan perubahan harga dalam 1 jam.<br><br>
             
             <b>🎯 Analisis Risk Management:</b><br>
-            Evaluasi efektivitas TP/SL berdasarkan kondisi market yang sebenarnya. WAJIB sebutkan data funding rate dan open interest dalam analisis.<br><br>
+            Evaluasi efektivitas strategi TP/SL berdasarkan kondisi market yang sebenarnya. Sebutkan data funding rate dan open interest dalam analisis.<br><br>
             
             <b>💡 Insight dan Rekomendasi:</b><br>
-            Berikan insight mendalam berdasarkan SEMUA data yang diberikan di atas. Apa pelajaran dari kondisi market spesifik ini?
+            Berikan insight mendalam berdasarkan kualitas sinyal entry ({entry_pass_rate:.1f}% pass rate) dan kondisi market spesifik ini. Apa pelajaran dari trade ini?
             
             PENTING:
-            - WAJIB gunakan SEMUA data market, indikator, dan teknikal yang diberikan
+            - Gunakan SEMUA data market, indikator, dan teknikal yang diberikan
             - Sebutkan angka-angka spesifik dari data (perubahan 24h, volume, dll)
             - Berikan analisis yang sangat detail dan komprehensif (500-600 kata)
             - Gunakan HTML formatting: <b>bold</b>, <br> untuk line break
             - Bahasa Indonesia yang profesional dan analitis
             - JANGAN gunakan format markdown atau code blocks
-            - Langsung mulai dengan konten HTML, tanpa pembuka apapun
+            - Fokus pada kualitas sinyal entry dan bagaimana itu mempengaruhi hasil
             """
             
             response = await self._generate_response(prompt)
@@ -857,7 +934,7 @@ class GeminiMarketAnalyst:
             # Get current market data from Bybit API
             ticker_response = self.session.get_tickers(category="linear", symbol=symbol)
             if ticker_response['retCode'] != 0 or not ticker_response['result']['list']:
-                return "Data market tidak tersedia untuk analisis perbandingan"
+                raise Exception(f"Failed to get ticker data for {symbol}: {ticker_response.get('retMsg', 'Unknown error')}")
             
             ticker = ticker_response['result']['list'][0]
             current_price = float(ticker['lastPrice'])
@@ -903,15 +980,15 @@ class GeminiMarketAnalyst:
                 else:
                     volatility_analysis = f"Volatilitas rendah ({avg_volatility:.2f}% avg range)"
                 
-                # Calculate price trend from klines
-                if len(closes) >= 2:
-                    recent_change = ((closes[-1] - closes[0]) / closes[0]) * 100
-                    if recent_change > 1.0:
-                        price_trend_analysis = f"Trend naik dalam 5 jam terakhir (+{recent_change:.2f}%)"
-                    elif recent_change < -1.0:
-                        price_trend_analysis = f"Trend turun dalam 5 jam terakhir ({recent_change:.2f}%)"
+                # Calculate price trend from klines (1 hour analysis)
+                if len(closes) >= 4:  # Use 4 candles (1 hour) instead of all
+                    recent_change = ((closes[-1] - closes[-4]) / closes[-4]) * 100
+                    if recent_change > 0.5:
+                        price_trend_analysis = f"Trend naik dalam 1 jam terakhir (+{recent_change:.2f}%)"
+                    elif recent_change < -0.5:
+                        price_trend_analysis = f"Trend turun dalam 1 jam terakhir ({recent_change:.2f}%)"
                     else:
-                        price_trend_analysis = f"Sideways dalam 5 jam terakhir ({recent_change:+.2f}%)"
+                        price_trend_analysis = f"Sideways dalam 1 jam terakhir ({recent_change:+.2f}%)"
             
             # Alternative 24h change calculation if API returns 0
             if abs(current_change_24h) < 0.01:  # If 24h change is essentially 0
@@ -927,11 +1004,21 @@ class GeminiMarketAnalyst:
                 except Exception as e:
                     pass  # Silent fallback
             
+            # Get 1-hour change data
+            klines_1h = self.session.get_kline(category="linear", symbol=symbol, interval="15", limit=4)
+            change_1h = 0
+            if klines_1h['retCode'] == 0 and klines_1h['result']['list']:
+                klines_1h_data = klines_1h['result']['list']
+                if len(klines_1h_data) >= 4:
+                    price_1h_ago = float(klines_1h_data[0][4])  # Close price 1h ago
+                    change_1h = ((current_price - price_1h_ago) / price_1h_ago) * 100
+            
             analysis = f"""PERBANDINGAN KONDISI MARKET:
             
 📊 KONDISI SAAT INI:
    - Harga: ${current_price:.6f}
    - Perubahan 24h: {current_change_24h:.2f}%
+   - Perubahan 1h: {change_1h:.2f}%
    - Volume 24h: ${current_volume_24h:,.0f}
    - Turnover 24h: ${current_turnover_24h:,.0f}
    - Open Interest: {open_interest:,.0f}
@@ -941,44 +1028,66 @@ class GeminiMarketAnalyst:
    
 ⏰ WAKTU SEJAK ENTRY:
    - Durasi: {hours_since_entry:.1f} jam
-   - Perubahan market dalam periode ini
+   - Momentum 1h: {'Positif' if change_1h > 0.2 else 'Negatif' if change_1h < -0.2 else 'Netral'}
    
 💹 ANALISIS PERUBAHAN:
    - Volume trend: {'Meningkat' if current_volume_24h > 50000000 else 'Normal' if current_volume_24h > 10000000 else 'Rendah'}
    - OI trend: {'Tinggi' if open_interest > 100000000 else 'Sedang' if open_interest > 50000000 else 'Rendah'}
-   - Market sentiment: {'Bullish' if current_change_24h > 2 else 'Bearish' if current_change_24h < -2 else 'Sideways'}
+   - Market sentiment 24h: {'Bullish' if current_change_24h > 2 else 'Bearish' if current_change_24h < -2 else 'Sideways'}
+   - Market sentiment 1h: {'Bullish' if change_1h > 0.5 else 'Bearish' if change_1h < -0.5 else 'Sideways'}
    - Funding bias: {'Long-heavy' if funding_rate > 0.01 else 'Short-heavy' if funding_rate < -0.01 else 'Balanced'}"""
             
             return analysis
             
         except Exception as e:
-            print(f"⚠️ Error in comprehensive market analysis: {e}")
-            return "Analisis market komprehensif tidak tersedia"
+            print(f"❌ Error in comprehensive market analysis: {e}")
+            # CRITICAL: Re-raise error instead of fallback - market data is required
+            raise Exception(f"Market data analysis failed: {e}")
     
     def _analyze_indicator_changes(self, entry_indicators: Dict, symbol: str) -> str:
-        """Analyze how indicators have changed since entry"""
+        """Analyze how indicators have changed since entry with passed/failed analysis"""
         try:
             if not entry_indicators:
                 return "Data indikator saat entry tidak tersedia"
             
-            analysis = f"""PERUBAHAN INDIKATOR SEJAK ENTRY:
+            # Get the direction from entry indicators context (we need to infer this)
+            # This is a limitation - we should store direction with indicators
+            # For now, we'll analyze both directions and see which makes more sense
             
-📈 INDIKATOR SAAT ENTRY:
+            from indicator_analysis_system import IndicatorAnalysisSystem
+            analyzer = IndicatorAnalysisSystem()
+            
+            # Try to determine direction from context or assume we need both analyses
+            # Since we don't have direction stored, we'll provide general analysis
+            
+            analysis = f"""ANALISIS INDIKATOR SAAT ENTRY:
+            
+📈 KONDISI INDIKATOR SAAT ENTRY:
    - EMA Fast > Slow: {'✅' if entry_indicators.get('ema_fast_above_slow') else '❌'}
    - RSI Oversold: {'✅' if entry_indicators.get('rsi_oversold') else '❌'}
    - RSI Overbought: {'✅' if entry_indicators.get('rsi_overbought') else '❌'}
-   - MACD Bullish: {'✅' if entry_indicators.get('macd_bullish') else '❌'}
+   - MACD Line > Signal: {'✅' if entry_indicators.get('macd_bullish') else '❌'}
    - Volume Confirmation: {'✅' if entry_indicators.get('volume_confirmation') else '❌'}
    - Volatility Confirmation: {'✅' if entry_indicators.get('volatility_confirmation') else '❌'}
    - Trend Alignment: {'✅' if entry_indicators.get('trend_alignment') else '❌'}
+   - Momentum Confirmation: {'✅' if entry_indicators.get('momentum_confirmation') else '❌'}
    
-🔄 VALIDITAS SINYAL:
-   - Total indikator positif saat entry: {sum(1 for v in entry_indicators.values() if v)}
-   - Kekuatan sinyal: {'Kuat' if sum(1 for v in entry_indicators.values() if v) >= 4 else 'Sedang' if sum(1 for v in entry_indicators.values() if v) >= 2 else 'Lemah'}
+📊 NILAI NUMERIK SAAT ENTRY:
+   - RSI Level: {entry_indicators.get('rsi_level', 'N/A')}
+   - EMA Fast: {entry_indicators.get('ema_fast_value', 'N/A')}
+   - EMA Slow: {entry_indicators.get('ema_slow_value', 'N/A')}
+   - MACD Line: {entry_indicators.get('macd_line_value', 'N/A')}
+   - Signal Line: {entry_indicators.get('signal_line_value', 'N/A')}
+   - ATR: {entry_indicators.get('atr_value', 'N/A')}
    
-⚠️ PERUBAHAN KONDISI:
-   - Indikator mungkin sudah berubah sejak entry
-   - Perlu evaluasi ulang kondisi teknikal saat ini"""
+🔄 KEKUATAN SINYAL SAAT ENTRY:
+   - Total indikator positif: {sum(1 for v in entry_indicators.values() if isinstance(v, bool) and v)}
+   - Kekuatan sinyal: {'Kuat' if sum(1 for v in entry_indicators.values() if isinstance(v, bool) and v) >= 5 else 'Sedang' if sum(1 for v in entry_indicators.values() if isinstance(v, bool) and v) >= 3 else 'Lemah'}
+   
+⚠️ CATATAN PENTING:
+   - Kondisi indikator mungkin sudah berubah sejak entry
+   - Analisis ini berdasarkan snapshot saat posisi dibuka
+   - Perlu evaluasi kondisi teknikal saat exit untuk perbandingan lengkap"""
             
             return analysis
             
@@ -1061,8 +1170,9 @@ class GeminiMarketAnalyst:
             return analysis
             
         except Exception as e:
-            print(f"⚠️ Error in current technical analysis: {e}")
-            return "Analisis teknikal saat ini tidak tersedia"
+            print(f"❌ Error in current technical analysis: {e}")
+            # CRITICAL: Re-raise error instead of fallback - technical data is required
+            raise Exception(f"Technical analysis failed: {e}")
         """Interactive chat with real market data access and trading system data
         
         Args:
@@ -1452,6 +1562,33 @@ class GeminiMarketAnalyst:
         except Exception as e:
             return f"Multi-symbol data error: {str(e)}"
     
+    def _format_numerical_indicators(self, indicators: Dict) -> str:
+        """Format numerical indicators for AI prompt"""
+        numerical_indicators = []
+        
+        numerical_keys = ['rsi_level', 'atr_value', 'ema_fast_value', 'ema_slow_value', 
+                         'macd_line_value', 'signal_line_value', 'support_resistance', 
+                         'price_distance_from_level']
+        
+        descriptions = {
+            'rsi_level': 'RSI Level',
+            'atr_value': 'Average True Range (Volatility)',
+            'ema_fast_value': 'EMA Fast Value',
+            'ema_slow_value': 'EMA Slow Value',
+            'macd_line_value': 'MACD Line Value',
+            'signal_line_value': 'Signal Line Value',
+            'support_resistance': 'Support/Resistance Level',
+            'price_distance_from_level': 'Distance from Key Level (%)'
+        }
+        
+        for key in numerical_keys:
+            if key in indicators and indicators[key] != 0:
+                desc = descriptions.get(key, key.replace('_', ' ').title())
+                value = indicators[key]
+                numerical_indicators.append(f"- {desc}: {value:.6f}")
+        
+        return "\n".join(numerical_indicators) if numerical_indicators else "No numerical indicator data"
+    
     def _format_indicators(self, indicators: Dict) -> str:
         """Format technical indicators for AI prompt with clear descriptions"""
         if not indicators:
@@ -1463,18 +1600,18 @@ class GeminiMarketAnalyst:
         boolean_indicators = []
         numerical_indicators = []
         
-        # Indicator descriptions
+        # Indicator descriptions with direction context
         descriptions = {
             'ema_fast_above_slow': 'EMA Fast > EMA Slow (Trend Direction)',
-            'macd_bullish': 'MACD Bullish (Momentum)',
-            'rsi_oversold': 'RSI Oversold (<35)',
-            'rsi_overbought': 'RSI Overbought (>65)',
-            'rsi_neutral': 'RSI Neutral Zone (35-65)',
-            'volume_confirmation': 'Volume Above Average',
-            'volatility_confirmation': 'Sufficient Volatility',
+            'macd_bullish': 'MACD Line > Signal Line (Momentum)',
+            'rsi_oversold': 'RSI Oversold (<30)',
+            'rsi_overbought': 'RSI Overbought (>70)',
+            'rsi_neutral': 'RSI Neutral Zone (30-70)',
+            'volume_confirmation': 'Volume Confirmation',
+            'volatility_confirmation': 'VOLATILITY CONFIRMATION',
             'price_near_support': 'Price Near Support Level',
             'price_near_resistance': 'Price Near Resistance Level',
-            'trend_alignment': 'Trend Alignment with Direction',
+            'trend_alignment': 'Trend Alignment',
             'momentum_confirmation': 'Momentum Confirmation',
             'rsi_level': 'RSI Level',
             'atr_value': 'Average True Range (ATR)',
@@ -1508,6 +1645,32 @@ class GeminiMarketAnalyst:
             formatted.extend(numerical_indicators)
         
         return "\n".join(formatted) if formatted else "No valid indicator data"
+    
+    def _format_numerical_indicators(self, indicators: Dict) -> str:
+        """Format only numerical indicators for AI prompt"""
+        if not indicators:
+            return "No numerical indicator data available"
+        
+        numerical_indicators = []
+        
+        # Numerical indicator descriptions
+        descriptions = {
+            'rsi_level': 'RSI Level',
+            'atr_value': 'Average True Range (Volatility)',
+            'ema_fast_value': 'EMA Fast Value',
+            'ema_slow_value': 'EMA Slow Value',
+            'macd_line_value': 'MACD Line Value',
+            'signal_line_value': 'Signal Line Value',
+            'support_resistance': 'Support/Resistance Level',
+            'price_distance_from_level': 'Distance from Key Level (%)'
+        }
+        
+        for key, value in indicators.items():
+            if isinstance(value, (int, float)) and value != 0:
+                description = descriptions.get(key, key.replace('_', ' ').title())
+                numerical_indicators.append(f"- {description}: {value:.6f}")
+        
+        return "\n".join(numerical_indicators) if numerical_indicators else "No numerical indicator values"
     
     def _calculate_duration(self, start_time, end_time) -> str:
         """Calculate and format duration - handles both string and datetime inputs"""

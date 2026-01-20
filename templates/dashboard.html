@@ -35,6 +35,27 @@
             border-right: 2px solid rgba(255, 215, 0, 0.3);
             box-shadow: 4px 0 20px rgba(0, 0, 0, 0.3);
             transition: transform 0.3s ease, width 0.3s ease;
+            overflow-y: auto; /* Enable vertical scrolling */
+            overflow-x: hidden; /* Hide horizontal scrollbar */
+        }
+        
+        /* Custom scrollbar for sidebar */
+        .sidebar::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        .sidebar::-webkit-scrollbar-track {
+            background: rgba(255, 215, 0, 0.1);
+            border-radius: 3px;
+        }
+        
+        .sidebar::-webkit-scrollbar-thumb {
+            background: rgba(255, 215, 0, 0.3);
+            border-radius: 3px;
+        }
+        
+        .sidebar::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 215, 0, 0.5);
         }
         
         .sidebar.collapsed {
@@ -61,6 +82,25 @@
         
         .sidebar.collapsed .bot-status .status-indicator span:first-child {
             display: none;
+        }
+        
+        /* Trading control buttons in collapsed mode */
+        .sidebar.collapsed .trading-control-buttons {
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        
+        .sidebar.collapsed .trading-control-buttons button {
+            padding: 0.75rem;
+            font-size: 0.75rem;
+        }
+        
+        .sidebar.collapsed .trading-control-buttons button span {
+            display: none;
+        }
+        
+        .sidebar.collapsed .trading-control-buttons button i {
+            margin: 0;
         }
         
         .sidebar-overlay {
@@ -95,8 +135,57 @@
             transition: background 0.3s ease;
         }
         
-        .hamburger-btn:hover {
-            background: rgba(255, 215, 0, 0.1);
+        /* Mobile responsive */
+        @media (max-width: 1024px) {
+            .sidebar {
+                position: fixed;
+                transform: translateX(-100%);
+                z-index: 50;
+                width: 280px;
+            }
+            
+            .sidebar.open {
+                transform: translateX(0);
+            }
+            
+            .sidebar-overlay {
+                display: block;
+            }
+            
+            .sidebar-overlay.active {
+                display: block;
+            }
+            
+            .mobile-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }
+            
+            .main-content {
+                margin-left: 0;
+                padding-top: 80px;
+            }
+            
+            .main-content.sidebar-collapsed {
+                margin-left: 0;
+            }
+        }
+        
+        @media (min-width: 1025px) {
+            .sidebar {
+                position: fixed;
+                transform: translateX(0);
+            }
+            
+            .main-content {
+                margin-left: var(--sidebar-width);
+                transition: margin-left 0.3s ease;
+            }
+            
+            .main-content.sidebar-collapsed {
+                margin-left: 80px;
+            }
         }
 
         /* Animated Mascot Styles */
@@ -693,7 +782,39 @@
                 
                 <hr class="border-gray-700 my-4">
                 
-                <div class="sidebar-item p-4 rounded-lg cursor-pointer" onclick="showSettings()" title="Settings">
+                <!-- Trading Control Section -->
+                <div class="mb-4">
+                    <div class="text-xs text-gray-500 uppercase tracking-wider mb-2 sidebar-text">Trading Control</div>
+                    
+                    <!-- Trading Status Display -->
+                    <div class="sidebar-item p-3 rounded-lg mb-2" id="trading-status-display">
+                        <div class="flex items-center space-x-3">
+                            <i class="fas fa-circle text-green-500 sidebar-icon" id="trading-status-icon"></i>
+                            <div class="sidebar-text">
+                                <div class="font-semibold text-sm" id="trading-status-text">ACTIVE</div>
+                                <div class="text-xs text-gray-400" id="trading-status-detail">Trading enabled</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Start/Stop Buttons -->
+                    <div class="flex space-x-2 trading-control-buttons">
+                        <button class="flex-1 bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg text-sm font-semibold transition-colors" 
+                                onclick="startTrading()" id="start-trading-btn">
+                            <i class="fas fa-play mr-1"></i>
+                            <span class="sidebar-text">Start</span>
+                        </button>
+                        <button class="flex-1 bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg text-sm font-semibold transition-colors" 
+                                onclick="stopTrading()" id="stop-trading-btn">
+                            <i class="fas fa-stop mr-1"></i>
+                            <span class="sidebar-text">Stop</span>
+                        </button>
+                    </div>
+                </div>
+                
+                <hr class="border-gray-700 my-4">
+                
+                <!-- <div class="sidebar-item p-4 rounded-lg cursor-pointer" onclick="showSettings()" title="Settings">
                     <div class="flex items-center space-x-3">
                         <i class="fas fa-cog text-blue-500 sidebar-icon"></i>
                         <div class="sidebar-text">
@@ -711,7 +832,7 @@
                             <div class="text-xs text-gray-400">Bot Activity</div>
                         </div>
                     </div>
-                </div>
+                </div> -->
             </nav>
         </div>
         
@@ -2193,12 +2314,14 @@
                                     <th class="text-left py-3 px-4 text-gray-400">TP/SL</th>
                                     <th class="text-left py-3 px-4 text-gray-400">Unrealized PnL</th>
                                     <th class="text-left py-3 px-4 text-gray-400">Durasi</th>
+                                    <th class="text-left py-3 px-4 text-gray-400">Waktu Entry</th>
+                                    <th class="text-left py-3 px-4 text-gray-400">Chart</th>
                                     <th class="text-left py-3 px-4 text-gray-400">Detail</th>
                                 </tr>
                             </thead>
                             <tbody id="open-positions-table">
                                 <tr>
-                                    <td colspan="9" class="text-center py-8 text-gray-500">No open positions</td>
+                                    <td colspan="12" class="text-center py-8 text-gray-500">No open positions</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -2235,12 +2358,13 @@
                                     <th class="text-left py-3 px-4 text-gray-400">PnL</th>
                                     <th class="text-left py-3 px-4 text-gray-400">Alasan Exit</th>
                                     <th class="text-left py-3 px-4 text-gray-400">Durasi</th>
+                                    <th class="text-left py-3 px-4 text-gray-400">Waktu Entry</th>
                                     <th class="text-left py-3 px-4 text-gray-400">Indikator</th>
                                 </tr>
                             </thead>
                             <tbody id="trade-history-table">
                                 <tr>
-                                    <td colspan="9" class="text-center py-8 text-gray-500">Belum ada riwayat trading</td>
+                                    <td colspan="10" class="text-center py-8 text-gray-500">Belum ada riwayat trading</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -2386,6 +2510,19 @@
             pnlChart.update();
         }
         
+        
+        // Function to format local time (already in WIB)
+        function formatToWIB(timeString) {
+            const date = new Date(timeString);
+            return date.toLocaleString('id-ID', {
+                day: '2-digit',
+                month: '2-digit', 
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+        
         function updateOpenPositions(positions) {
             console.log('🔄 updateOpenPositions called with:', positions.length, 'positions');
             const tbody = document.getElementById('open-positions-table');
@@ -2397,7 +2534,7 @@
             countHeaderElement.textContent = positions.length;
             
             if (positions.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="10" class="text-center py-8 text-gray-500">No open positions</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="11" class="text-center py-8 text-gray-500">No open positions</td></tr>';
                 return;
             }
             
@@ -2424,6 +2561,15 @@
                             <div class="text-xs">(${pos.pnl_percentage.toFixed(2)}%)</div>
                         </td>
                         <td class="py-3 px-4 text-sm text-gray-400">${duration}m</td>
+                        <td class="py-3 px-4 text-xs text-gray-400">
+                            <div>${formatToWIB(pos.entry_time)}</div>
+                        </td>
+                        <td class="py-3 px-4 text-xs">
+                            <button onclick="openTradingViewChart('${pos.symbol}')" 
+                                    class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-xs transition-colors">
+                                <i class="fas fa-chart-line mr-1"></i>Chart
+                            </button>
+                        </td>
                         <td class="py-3 px-4 text-xs">
                             <button onclick="showOpenPositionDetailsAPI('${pos.id}')" 
                                     class="bg-teal-500 hover:bg-teal-600 text-white px-3 py-1 rounded text-xs transition-colors">
@@ -2433,6 +2579,16 @@
                     </tr>
                 `;
             }).join('');
+        }
+        
+        // Function to open TradingView chart for specific symbol
+        function openTradingViewChart(symbol) {
+            // Convert symbol format for TradingView (remove USDT suffix and add BYBIT prefix)
+            let tvSymbol = symbol.replace('USDT', '');
+            let tradingViewUrl = `https://www.tradingview.com/chart/?symbol=BYBIT:${tvSymbol}USDT.P&interval=15`;
+            
+            // Open in new tab
+            window.open(tradingViewUrl, '_blank');
         }
         
         // Pagination variables
@@ -2480,7 +2636,7 @@
             const tbody = document.getElementById('trade-history-table');
             
             if (trades.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="9" class="text-center py-8 text-gray-500">Belum ada riwayat trading</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="10" class="text-center py-8 text-gray-500">Belum ada riwayat trading</td></tr>';
                 return;
             }
             
@@ -2509,6 +2665,9 @@
                             </span>
                         </td>
                         <td class="py-3 px-4 text-sm text-gray-400">${trade.duration_minutes}m</td>
+                        <td class="py-3 px-4 text-xs text-gray-400">
+                            <div>${formatToWIB(trade.entry_time)}</div>
+                        </td>
                         <td class="py-3 px-4 text-xs">
                             <button onclick="showTradeDetails('${trade.id}')" 
                                     class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-xs transition-colors">
@@ -2719,6 +2878,10 @@
         
         function startNotificationPolling() {
             console.log('🔔 Starting notification polling...');
+            
+            // Clear old notifications on page load
+            clearOldNotifications();
+            
             // Poll for new notifications every 2 seconds
             setInterval(async () => {
                 try {
@@ -2738,6 +2901,26 @@
                     console.error('❌ Error polling notifications:', error);
                 }
             }, 2000); // Poll every 2 seconds
+        }
+        
+        async function clearOldNotifications() {
+            try {
+                console.log('🧹 Clearing old notifications on page load...');
+                const response = await fetch('/api/notifications/clear', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                const data = await response.json();
+                if (data.success) {
+                    console.log('✅ Old notifications cleared successfully');
+                } else {
+                    console.error('❌ Failed to clear notifications:', data.error);
+                }
+            } catch (error) {
+                console.error('❌ Error clearing notifications:', error);
+            }
         }
         
         function handleNotification(notification) {
@@ -3149,6 +3332,118 @@
             initial-currency="usd">
         </gecko-coin-price-marquee-widget>
     </div>
+
+    <script>
+        // Trading Control Functions
+        async function loadTradingStatus() {
+            try {
+                const response = await fetch('/api/trading/status');
+                const data = await response.json();
+                
+                if (data.success) {
+                    updateTradingStatusDisplay(data.status);
+                }
+            } catch (error) {
+                console.error('Error loading trading status:', error);
+            }
+        }
+        
+        function updateTradingStatusDisplay(status) {
+            const statusIcon = document.getElementById('trading-status-icon');
+            const statusText = document.getElementById('trading-status-text');
+            const statusDetail = document.getElementById('trading-status-detail');
+            const startBtn = document.getElementById('start-trading-btn');
+            const stopBtn = document.getElementById('stop-trading-btn');
+            
+            if (status.enabled) {
+                statusIcon.className = 'fas fa-circle text-green-500 sidebar-icon';
+                statusText.textContent = 'ACTIVE';
+                statusDetail.textContent = 'Trading enabled';
+                startBtn.disabled = true;
+                startBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                stopBtn.disabled = false;
+                stopBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            } else {
+                statusIcon.className = 'fas fa-circle text-red-500 sidebar-icon';
+                statusText.textContent = 'STOPPED';
+                statusDetail.textContent = 'Trading disabled';
+                startBtn.disabled = false;
+                startBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                stopBtn.disabled = true;
+                stopBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            }
+        }
+        
+        async function startTrading() {
+            try {
+                const response = await fetch('/api/trading/start', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showNotification('✅ Trading Started', 'Bot will resume taking new positions', 'success');
+                    loadTradingStatus();
+                } else {
+                    showNotification('❌ Error', data.error || 'Failed to start trading', 'error');
+                }
+            } catch (error) {
+                showNotification('❌ Error', 'Failed to start trading', 'error');
+            }
+        }
+        
+        async function stopTrading() {
+            try {
+                const response = await fetch('/api/trading/stop', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showNotification('🛑 Trading Stopped', 'No new positions. Existing positions monitored.', 'warning');
+                    loadTradingStatus();
+                } else {
+                    showNotification('❌ Error', data.error || 'Failed to stop trading', 'error');
+                }
+            } catch (error) {
+                showNotification('❌ Error', 'Failed to stop trading', 'error');
+            }
+        }
+        
+        function showNotification(title, message, type = 'info') {
+            const notification = document.createElement('div');
+            notification.className = `fixed top-4 right-4 p-4 rounded-lg shadow-lg z-50 max-w-sm ${
+                type === 'success' ? 'bg-green-600' : 
+                type === 'error' ? 'bg-red-600' : 
+                type === 'warning' ? 'bg-yellow-600' : 'bg-blue-600'
+            } text-white`;
+            
+            notification.innerHTML = `
+                <div class="flex items-start space-x-3">
+                    <div class="flex-1">
+                        <div class="font-semibold">${title}</div>
+                        <div class="text-sm opacity-90">${message}</div>
+                    </div>
+                    <button onclick="this.parentElement.parentElement.remove()" class="text-white hover:text-gray-200">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            `;
+            
+            document.body.appendChild(notification);
+            setTimeout(() => notification.remove(), 5000);
+        }
+        
+        // Load trading status on page load and refresh every 30 seconds
+        document.addEventListener('DOMContentLoaded', function() {
+            loadTradingStatus();
+            setInterval(loadTradingStatus, 30000);
+        });
+    </script>
 
 </body>
 </html>

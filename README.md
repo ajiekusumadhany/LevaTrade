@@ -1,119 +1,134 @@
-# Crypto Trading Bot - Bybit + Telegram
+# 🚀 LevaTrade - Advanced Crypto Trading Bot
 
-Bot trading crypto yang menggunakan Bybit API untuk data market dan Telegram untuk notifikasi alert berdasarkan strategi H4 (4 jam).
+## 📋 Overview
+LevaTrade adalah sistem trading otomatis cryptocurrency yang menggunakan strategi berbasis sesi market dengan AI integration dan risk management yang komprehensif.
 
-## Fitur
+### ✨ Key Features
+- **4-Session Strategy**: DEAD_ZONE, ASIA, LONDON, NEWYORK dengan risk berbeda
+- **Conditional Risk Escalation**: Risk naik hanya jika semua kondisi terpenuhi  
+- **Parallel Processing**: Scan 100 symbols dengan 20 threads
+- **AI Integration**: Gemini AI untuk market analysis dan reasoning
+- **Comprehensive Risk Management**: Multiple layers of protection
+- **Real-time Dashboard**: Web-based monitoring dan control
+- **Telegram Integration**: Notifikasi dan kontrol via bot
+- **Dry Run Mode**: Testing tanpa risiko modal
 
-- ✅ Analisis teknikal otomatis (EMA, RSI, MACD, ATR)
-- ✅ Deteksi Support & Resistance (Pivot Points)
-- ✅ Risk management otomatis (leverage, position size)
-- ✅ Notifikasi Telegram real-time
-- ✅ Multi-symbol monitoring
+## 🎯 Performance Targets
+- **Daily Target**: 2-5% profit
+- **Max Daily Loss**: 2% dari balance
+- **Max Drawdown**: 20% (emergency stop)
+- **Win Rate Target**: 60-70%
+- **Risk per Trade**: 0.3-1.0% (tergantung sesi)
 
-## Setup
+## 🚀 Quick Start
 
-### 1. Install Dependencies
-
+### 1. Setup Environment
 ```bash
+# Install dependencies
 pip install -r requirements.txt
+pip install -r requirements_dashboard.txt
+
+# Setup configuration
+copy .env.example .env
+# Edit .env dengan API keys Anda
 ```
 
-### 2. Setup Telegram Bot
-
-1. Buka Telegram dan cari [@BotFather](https://t.me/botfather)
-2. Kirim `/newbot` dan ikuti instruksi
-3. Beri nama bot (contoh: "My Crypto Alert Bot")
-4. Beri username bot (harus diakhiri 'bot', contoh: "mycryptoalert_bot")
-5. Copy token yang diberikan (format: `123456789:ABCdefGHIjklMNOpqrsTUVwxyz`)
-6. Paste token ke file `.env` di `TELEGRAM_BOT_TOKEN`
-
-### 3. Dapatkan Chat ID
-
-**Cara 1 - Otomatis (Recommended):**
+### 2. Configuration
+Edit file `.env`:
 ```bash
-# Edit .env, isi TELEGRAM_BOT_TOKEN dulu
-# Kirim pesan "Hello" ke bot Anda di Telegram
-python test_telegram.py
-# Script akan menampilkan Chat ID Anda
+# Bybit API
+BYBIT_API_KEY=your_api_key
+BYBIT_API_SECRET=your_api_secret
+
+# Telegram Bot
+TELEGRAM_BOT_TOKEN=your_bot_token
+TELEGRAM_CHAT_ID=your_chat_id
+
+# Trading Settings
+BALANCE_USD=1000
+MAX_RISK_PERCENT=1.0
+MAX_LEVERAGE=20
+MAX_OPEN_POSITIONS=5
+
+# Gemini AI
+GEMINI_API_KEYS=key1,key2,key3
 ```
 
-**Cara 2 - Manual:**
-1. Kirim pesan ke bot Anda di Telegram
-2. Buka browser: `https://api.telegram.org/bot<TOKEN>/getUpdates`
-3. Cari `"chat":{"id":123456789` dan copy angkanya
-4. Paste ke `.env` di `TELEGRAM_CHAT_ID`
-
-### 4. Test Koneksi
-
-**Test Bybit (sudah dikonfigurasi untuk testnet):**
+### 3. Run System
 ```bash
-python test_bybit.py
+# Dry Run Mode (Recommended untuk testing)
+python crypto_bot_parallel.py
+
+# Dashboard (Terminal baru)
+python dashboard_app.py
+# Akses: http://localhost:5000
 ```
 
-**Test Telegram:**
+## 📊 Session-Based Strategy
+
+### 🌅 DEAD ZONE (02:00-07:00 WIB)
+- **Risk**: 0.3% per trade | **Strategy**: Conservative scalping | **Target**: 0.5-1%
+
+### 🌏 ASIA SESSION (07:00-14:00 WIB)  
+- **Risk**: 0.3-0.4% per trade | **Strategy**: Mean reversion | **Target**: 1-2%
+
+### 🇬🇧 LONDON SESSION (14:00-20:00 WIB)
+- **Risk**: 0.5-0.8% per trade | **Strategy**: Structural breakout | **Target**: 2-4%
+
+### 🇺🇸 NEW YORK SESSION (20:00-02:00 WIB)
+- **Risk**: 0.4-1.0% per trade | **Strategy**: Momentum trading | **Target**: 3-6%
+- **Special**: NY Sniper Mode (max 2 trades/day @ 1% risk)
+
+## 🛡️ Risk Management
+
+### 🚨 Emergency Stops
+- **Hard Stop**: Drawdown > 20% | **Daily Loss**: > 2% | **Consecutive Loss**: 3x
+- **Correlation Risk**: Max 3 posisi berkorelasi
+
+### 🎯 Conditional Risk Escalation
+Risk naik hanya jika SEMUA kondisi terpenuhi:
+1. ✅ Win rate ≥ 60% | 2. ✅ Profit > 0% | 3. ✅ Drawdown < 10%
+4. ✅ Loss berturut < 3 | 5. ✅ Volatility normal
+
+## 📱 Telegram Commands
+`/status` `/balance` `/positions` `/profit` `/stop` `/start` `/emergency`
+
+## 🖥️ Dashboard Features
+Real-time status • P&L tracking • Position monitoring • Session analysis • AI chat • Trading control
+
+## 📁 Core Files
+```
+crypto_bot_parallel.py          # Main bot
+session_management_system.py    # Session detection  
+conditional_risk_system.py      # Risk management
+enhanced_trading_strategy.py    # Trading strategy
+gemini_ai_system.py            # AI integration
+dashboard_app.py               # Web dashboard
+dry_run_system.py              # Simulation
+real_trade_system.py           # Real trading
+```
+
+## 🔧 Emergency Stop
 ```bash
-python test_telegram.py
+# File-based
+echo '{"trading_enabled": false, "emergency_stop": true}' > trading_control.json
+
+# Process kill
+taskkill /f /im python.exe
+
+# Telegram
+/emergency
 ```
 
-### 5. Jalankan Bot
+## 📄 Documentation
+- **[📖 Dokumentasi Lengkap](SISTEM_TRADING_DOKUMENTASI_LENGKAP.md)** - Panduan lengkap sistem
+- **[🔧 Technical Documentation](TECHNICAL_DOCUMENTATION.md)** - Dokumentasi teknis developer
+- **[⚡ Quick Start Guide](QUICKSTART.md)** - Panduan cepat memulai
+- **[📊 Status & Setup](STATUS.md)** - Status sistem dan konfigurasi
 
-```bash
-python crypto_bot.py
-```
+## ⚠️ Disclaimer
+Trading cryptocurrency melibatkan risiko tinggi. Gunakan dengan bijak dan hanya dengan modal yang siap hilang. Selalu test di dry run mode terlebih dahulu.
 
-Bot akan scan market setiap 5 menit dan kirim alert ke Telegram saat ada setup trading.
+---
 
-## Konfigurasi Trading
-
-Edit di `crypto_bot.py`:
-
-```python
-SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT']  # Symbol yang dimonitor
-TIMEFRAME = '240'  # 4H
-BALANCE = 1000  # Modal USD
-MAX_RISK = 2.0  # Risk per trade %
-MAX_LEVERAGE = 20  # Max leverage
-```
-
-## Cara Kerja
-
-Bot akan:
-1. Mengambil data candlestick 4H dari Bybit
-2. Menghitung indikator (EMA 21/55, RSI, MACD, ATR)
-3. Mendeteksi support/resistance
-4. Mengidentifikasi bias market (bullish/bearish)
-5. Menghitung entry zone, TP, SL, dan risk management
-6. Mengirim alert ke Telegram saat kondisi terpenuhi
-
-## Format Alert
-
-```
-📈 LONG SETUP - BTCUSDT
-
-💰 Price: $45000.00
-🎯 Entry Zone: $44800.00 - $45100.00
-🛑 Stop Loss: $44200.00
-✅ Take Profit: $46500.00
-
-⚡ Leverage: 5x (NORMAL)
-💵 Risk Amount: $20.00
-📊 Position Size: 0.125
-📉 SL %: 1.78%
-🎲 R:R: 1:1.67
-```
-
-## Troubleshooting
-
-**Bot tidak mengirim alert:**
-- Pastikan TELEGRAM_BOT_TOKEN dan CHAT_ID benar
-- Cek koneksi internet
-- Pastikan sudah kirim pesan ke bot minimal 1x
-
-**Error Bybit API:**
-- Untuk data public, API key tidak wajib
-- Cek koneksi internet
-- Pastikan symbol valid (gunakan format: BTCUSDT, ETHUSDT, dll)
-
-## Disclaimer
-
-Bot ini hanya untuk edukasi. Trading crypto berisiko tinggi. Gunakan dengan bijak dan hanya dengan modal yang siap hilang.
+**Happy Trading! 🚀**

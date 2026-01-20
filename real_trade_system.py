@@ -264,17 +264,17 @@ class RealTradeSystem:
                 cursor.execute('''
                     INSERT INTO open_positions 
                     (id, symbol, direction, entry_price, quantity, leverage, tp_price, sl_price, 
-                     entry_time, current_price, indicators, position_value_usd, bybit_order_id,
+                     entry_time, current_price, indicators, position_value_usd, bybit_order_id, ai_entry_reasoning,
                      market_cap, market_cap_rank, total_volume_24h, circulating_supply, total_supply, max_supply,
                      price_change_24h, price_change_percentage_24h, price_change_percentage_7d, price_change_percentage_30d,
                      ath, ath_change_percentage, atl, atl_change_percentage, bybit_volume_24h, bybit_turnover_24h,
                      liquidity_score, volatility_score, market_dominance, market_cap_category, volume_category, market_data_timestamp, trading_session)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     position_id, signal['symbol'], signal['direction'], signal['close'],
                     signal['pos_size'], signal['leverage'], signal['tp'], signal['sl'],
                     datetime.now().isoformat(), signal['close'], json.dumps(indicators),
-                    signal['position_value_usd'], bybit_order_id,
+                    signal['position_value_usd'], bybit_order_id, signal.get('ai_entry_reasoning', ''),
                     # Market data
                     market_data.get('market_cap', 0),
                     market_data.get('market_cap_rank', 0),
@@ -442,7 +442,7 @@ class RealTradeSystem:
             if not gemini_analyst:
                 raise Exception("Gemini AI is required for exit reasoning but could not be initialized")
             
-            # Prepare position data for AI analysis
+            # Prepare position data for AI analysis with ALL stored market data
             position_data = {
                 'symbol': pos[1],  # symbol
                 'direction': pos[2],  # direction
@@ -455,7 +455,32 @@ class RealTradeSystem:
                 'exit_reason': exit_reason,
                 'entry_indicators': json.loads(pos[11]) if pos[11] else {},  # indicators
                 'realized_pnl': 0,  # Will be calculated
-                'pnl_percentage': 0  # Will be calculated
+                'pnl_percentage': 0,  # Will be calculated
+                
+                # CRITICAL: Add all market data that was stored at entry
+                'market_cap': pos[16] if len(pos) > 16 else 0,
+                'market_cap_rank': pos[17] if len(pos) > 17 else 0,
+                'total_volume_24h': pos[18] if len(pos) > 18 else 0,
+                'circulating_supply': pos[19] if len(pos) > 19 else 0,
+                'total_supply': pos[20] if len(pos) > 20 else 0,
+                'max_supply': pos[21] if len(pos) > 21 else 0,
+                'price_change_24h': pos[22] if len(pos) > 22 else 0,
+                'price_change_percentage_24h': pos[23] if len(pos) > 23 else 0,
+                'price_change_percentage_7d': pos[24] if len(pos) > 24 else 0,
+                'price_change_percentage_30d': pos[25] if len(pos) > 25 else 0,
+                'ath': pos[26] if len(pos) > 26 else 0,
+                'ath_change_percentage': pos[27] if len(pos) > 27 else 0,
+                'atl': pos[28] if len(pos) > 28 else 0,
+                'atl_change_percentage': pos[29] if len(pos) > 29 else 0,
+                'bybit_volume_24h': pos[30] if len(pos) > 30 else 0,
+                'bybit_turnover_24h': pos[31] if len(pos) > 31 else 0,
+                'liquidity_score': pos[32] if len(pos) > 32 else 0,
+                'volatility_score': pos[33] if len(pos) > 33 else 0,
+                'market_dominance': pos[34] if len(pos) > 34 else 0,
+                'market_cap_category': pos[35] if len(pos) > 35 else '',
+                'volume_category': pos[36] if len(pos) > 36 else '',
+                'market_data_timestamp': pos[37] if len(pos) > 37 else '',
+                'trading_session': pos[38] if len(pos) > 38 else 'UNKNOWN'
             }
             
             # Generate AI exit reasoning
@@ -589,6 +614,38 @@ Meskipun analisis AI tidak tersedia, trade ini tetap mengikuti protokol risk man
             self._update_performance_metrics(conn)
             
             print(f"✅ [REAL TRADE] Closed {direction} {symbol} - {exit_reason} - PnL: ${pnl:.2f} ({pnl_percentage:.2f}%)")
+            
+            # Record trade result for conditional risk system
+            try:
+                from conditional_risk_system import record_trade_result
+                # Get session from trading_session field or determine from entry_time
+                session = trading_session if 'trading_session' in locals() else 'UNKNOWN'
+                
+                # Calculate risk percentage used (from real balance)
+                current_real_balance = self.get_real_balance()
+                risk_used = (margin_used / current_real_balance) * 100 if current_real_balance > 0 else 0.5
+                
+                record_trade_result(session, pnl, risk_used)
+                print(f"📊 Trade result recorded: {session} session, PnL=${pnl:.2f}, Risk≈{risk_used:.1f}%")
+            except Exception as e:
+                print(f"⚠️ Failed to record trade result for conditional risk: {e}")
+            
+            # Send notification using file-based system
+            try:
+                from notification_system import send_notification
+                send_notification('position_closed', {
+                    'symbol': symbol,
+                    'direction': direction,
+                    'entry_price': entry_price,
+                    'exit_price': exit_price,
+                    'exit_reason': exit_reason,
+                    'pnl': pnl,
+                    'pnl_percentage': pnl_percentage,
+                    'duration_minutes': duration_minutes,
+                    'mode': 'real-trade'
+                })
+            except Exception as e:
+                print(f"⚠️ Failed to send notification: {e}")
             
             # Emit socket event for position closed
             socketio = get_socketio_instance()
@@ -842,6 +899,10 @@ Meskipun analisis AI tidak tersedia, trade ini tetap mengikuti protokol risk man
     def get_closed_positions(self) -> List[Dict]:
         """Get closed positions (alias for get_trade_history for compatibility)"""
         return self.get_trade_history(1000)  # Get all closed positions
+    
+    def get_current_balance(self) -> float:
+        """Get current balance from Bybit API (real-time)"""
+        return self.get_real_balance()  # Use the existing get_real_balance method
     
     def get_performance_metrics(self) -> Dict:
         """Get performance metrics"""
