@@ -1,0 +1,20 @@
+{
+  "agent": {
+    "model": "openai/gpt-4o-mini",
+    "instructions": "Kamu adalah asisten trading crypto untuk sistem LevaTrade. Selalu jawab dalam Bahasa Indonesia kecuali diminta lain. Gunakan skill trading-analyst untuk mengakses data bot."
+  },
+  "channels": {
+    "telegram": {
+      "botToken": "ISI_TELEGRAM_BOT_TOKEN_BARU_DISINI"
+    }
+  },
+  "agents": {
+    "defaults": {
+      "workspace": "~/.openclaw/workspace",
+      "env": {
+        "BRIDGE_SECRET": "e59a1bedb6e8c88e67c436f4abb23f16",
+        "BRIDGE_URL": "http://127.0.0.1:18790"
+      }
+    }
+  }
+}

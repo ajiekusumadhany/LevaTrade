@@ -1,1 +1,6 @@
-{"enabled": true, "last_updated": "2026-01-22T03:08:53.787092", "updated_by": "dashboard"}
+{
+  "enabled": true,
+  "status_text": "Trading Enabled",
+  "last_updated": "2026-03-28T20:45:12.020557",
+  "updated_by": "system_reset"
+}

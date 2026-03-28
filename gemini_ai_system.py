@@ -147,7 +147,7 @@ class GeminiMarketAnalyst:
         self.current_key_index = 0
         self.model_name = os.getenv('GEMINI_MODEL', 'gemini-2.0-flash-exp')
         self.temperature = float(os.getenv('GEMINI_TEMPERATURE', '0.7'))
-        self.max_tokens = int(os.getenv('GEMINI_MAX_TOKENS', '500'))
+        self.max_tokens = int(os.getenv('GEMINI_MAX_TOKENS', '2000'))
         
         # Configure Gemini with first API key
         genai.configure(api_key=self.api_keys[0])
@@ -157,7 +157,8 @@ class GeminiMarketAnalyst:
         self.session = HTTP(
             testnet=False,
             api_key=os.getenv('BYBIT_API_KEY', ''),
-            api_secret=os.getenv('BYBIT_API_SECRET', '')
+            api_secret=os.getenv('BYBIT_API_SECRET', ''),
+            domain="bytick"
         )
         
         print(f"🤖 Gemini AI Market Analyst initialized with {len(self.api_keys)} API keys")
@@ -180,113 +181,94 @@ class GeminiMarketAnalyst:
         return f"Key {self.current_key_index + 1}/{len(self.api_keys)}"
     
     async def generate_entry_reasoning(self, signal_data: Dict) -> str:
-        """Generate AI reasoning for position entry in Indonesian"""
+        """Generate AI reasoning for position entry in Indonesian — supports all 5 strategies"""
         try:
-            # Get current market data
-            market_data = await self._get_market_context(signal_data['symbol'])
-            
-            # Collect all indicators from signal data
-            indicators = {
-                # Boolean indicators
-                'ema_fast_above_slow': signal_data.get('ema_fast_above_slow', False),
-                'macd_bullish': signal_data.get('macd_bullish', False),
-                'rsi_oversold': signal_data.get('rsi_oversold', False),
-                'rsi_overbought': signal_data.get('rsi_overbought', False),
-                'rsi_neutral': signal_data.get('rsi_neutral', False),
-                'volume_confirmation': signal_data.get('volume_confirmation', False),
-                'volatility_confirmation': signal_data.get('volatility_confirmation', False),
-                'price_near_support': signal_data.get('price_near_support', False),
-                'price_near_resistance': signal_data.get('price_near_resistance', False),
-                'trend_alignment': signal_data.get('trend_alignment', False),
-                'momentum_confirmation': signal_data.get('momentum_confirmation', False),
-                
-                # Numerical values
-                'rsi_level': signal_data.get('rsi_level', 50),
-                'atr_value': signal_data.get('atr_value', 0),
-                'ema_fast_value': signal_data.get('ema_fast_value', 0),
-                'ema_slow_value': signal_data.get('ema_slow_value', 0),
-                'macd_line_value': signal_data.get('macd_line_value', 0),
-                'signal_line_value': signal_data.get('signal_line_value', 0),
-                'support_resistance': signal_data.get('support_resistance', 0),
-                'price_distance_from_level': signal_data.get('price_distance_from_level', 0)
-            }
-            
-            # CRITICAL: Analyze which indicators passed vs failed for this direction
-            from indicator_analysis_system import IndicatorAnalysisSystem
-            analyzer = IndicatorAnalysisSystem()
-            passed_indicators, failed_indicators = analyzer.analyze_indicators(indicators, signal_data['direction'])
-            
-            # Get market data analysis
-            market_analysis = await self._get_market_data_analysis(signal_data['symbol'], signal_data['direction'])
-            
-            # Format passed and failed indicators for AI
-            passed_list = []
-            failed_list = []
-            
-            for indicator in passed_indicators:
-                passed_list.append(f"✅ {indicator['description']}: {indicator['actual']} (mendukung {signal_data['direction']})")
-            
-            for indicator in failed_indicators:
-                failed_list.append(f"❌ {indicator['description']}: {indicator['actual']} (tidak mendukung {signal_data['direction']})")
-            
-            passed_text = "\n".join(passed_list) if passed_list else "Tidak ada indikator yang passed"
-            failed_text = "\n".join(failed_list) if failed_list else "Tidak ada indikator yang failed"
-            
-            pass_rate = (len(passed_indicators) / (len(passed_indicators) + len(failed_indicators)) * 100) if (len(passed_indicators) + len(failed_indicators)) > 0 else 0
-            
-            # Prepare prompt for entry reasoning
-            prompt = f"""
-            Analisis entry trading crypto ini dan berikan penjelasan detail:
-            
-            DETAIL POSISI:
-            - Symbol: {signal_data['symbol']}
-            - Arah: {signal_data['direction']}
-            - Harga Entry: ${signal_data['close']:.6f}
-            - Take Profit: ${signal_data.get('tp', 'N/A')}
-            - Stop Loss: ${signal_data.get('sl', 'N/A')}
-            - Ukuran Posisi: {signal_data.get('pos_size', 'N/A')}
-            - Leverage: {signal_data.get('leverage', 'N/A')}x
-            
-            ANALISIS INDIKATOR TEKNIKAL:
-            Pass Rate: {pass_rate:.1f}% ({len(passed_indicators)} passed, {len(failed_indicators)} failed)
-            
-            INDIKATOR YANG MENDUKUNG {signal_data['direction']} (PASSED):
-            {passed_text}
-            
-            INDIKATOR YANG TIDAK MENDUKUNG {signal_data['direction']} (FAILED):
-            {failed_text}
-            
-            NILAI INDIKATOR:
-            {self._format_numerical_indicators(indicators)}
-            
-            ANALISIS MARKET DATA:
-            {market_analysis}
-            
-            DATA PASAR SAAT INI:
-            {market_data}
-            
-            Berikan analisis dalam bahasa Indonesia yang mencakup:<br><br>
-            <b>1. Alasan Entry:</b> Mengapa ini titik entry yang bagus berdasarkan indikator yang PASSED<br><br>
-            <b>2. Analisis Teknikal:</b> Fokus pada indikator yang benar-benar mendukung {signal_data['direction']} (yang PASSED)<br><br>
-            <b>3. Konteks Pasar:</b> Kondisi pasar saat ini dan sentimen<br><br>
-            <b>4. Penilaian Risiko:</b> Risiko dari indikator yang FAILED dan mitigasinya<br><br>
-            <b>5. Ekspektasi Hasil:</b> Target harga dan timeline berdasarkan kekuatan sinyal
-            
-            PENTING:
-            - Gunakan bahasa Indonesia yang jelas dan ringkas (maksimal 300 kata)
-            - JANGAN gunakan format markdown (**, *, #, dll)
-            - Gunakan HTML formatting untuk keterbacaan: <b>bold</b>, <i>italic</i>, <br> untuk line break
-            - Fokus HANYA pada indikator yang PASSED sebagai alasan utama entry
-            - Sebutkan indikator yang FAILED sebagai faktor risiko
-            - Jangan salah interpretasi - gunakan data passed/failed yang sudah dianalisis
-            """
-            
+            symbol        = signal_data['symbol']
+            direction     = signal_data['direction']
+            strategy      = signal_data.get('strategy', 'ICT_SMC')
+            strategy_label= signal_data.get('strategy_label', '📐 ICT/SMC')
+            setup_type    = signal_data.get('setup_type', 'ICT')
+            session       = signal_data.get('session', 'N/A')
+            rr            = signal_data.get('rr_ratio', 0)
+            atr           = signal_data.get('atr_value', 0)
+            entry         = signal_data.get('close', 0)
+            tp            = signal_data.get('tp', 0)
+            sl            = signal_data.get('sl', 0)
+            leverage      = signal_data.get('leverage', 'N/A')
+            ict_score     = signal_data.get('ict_score', 0)
+
+            # ── Build strategy-specific context block ──────────────────────────
+            if strategy == 'ICT_SMC':
+                pd_zone    = signal_data.get('pd_zone', 'N/A')
+                fib_pct    = signal_data.get('fib_position_pct', 0)
+                bos        = signal_data.get('bos_confirmed', False)
+                choch      = signal_data.get('choch_detected', False)
+                in_ob      = signal_data.get('in_order_block', False)
+                in_fvg     = signal_data.get('in_fvg', False)
+                liq        = signal_data.get('liquidity_confirmed', False)
+                kz         = signal_data.get('kill_zone_active', False)
+                bias_dir   = signal_data.get('bias', 'N/A')
+                bos_bull   = signal_data.get('bos_bull', False)
+                bos_bear   = signal_data.get('bos_bear', False)
+                choch_bull = signal_data.get('choch_bull', False)
+                choch_bear = signal_data.get('choch_bear', False)
+                ssl_swept  = signal_data.get('ssl_swept', False)
+                bsl_swept  = signal_data.get('bsl_swept', False)
+                confirmators = signal_data.get('confirmators', [])
+
+                checks = [
+                    f"{'✅' if bos or bos_bull or bos_bear else '❌'} BOS: {'Bullish' if bos_bull else 'Bearish' if bos_bear else 'Tidak ada'}",
+                    f"{'✅' if choch or choch_bull or choch_bear else '❌'} CHoCH: {'Bullish' if choch_bull else 'Bearish' if choch_bear else 'Tidak ada'}",
+                    f"{'✅' if in_ob else '❌'} Order Block: {'Aktif' if in_ob else 'Tidak di OB'}",
+                    f"{'✅' if in_fvg else '❌'} Fair Value Gap: {'Aktif' if in_fvg else 'Tidak di FVG'}",
+                    f"{'✅' if liq else '❌'} Liquidity Sweep: {'SSL swept' if ssl_swept else 'BSL swept' if bsl_swept else 'Tidak ada'}",
+                    f"{'✅' if kz else '❌'} Kill Zone: {'Aktif' if kz else 'Di luar'}",
+                    f"PD Zone: {pd_zone} ({fib_pct:.0f}% Fib) | Bias: {bias_dir} | Score: {ict_score}/11",
+                    f"Konfirmator: {', '.join(confirmators) if confirmators else 'Tidak ada'}",
+                ]
+                strategy_instructions = "Konfirmasi ICT/SMC (Scalping 15m/5m/1m):\n" + '\n'.join(checks)
+
+            elif strategy == 'MEAN_REVERSION':
+                z_score = signal_data.get('z_score', 0)
+                bb_pos  = signal_data.get('bb_position', 'N/A')
+                strategy_instructions = f"Konfirmasi Mean Reversion: Z-Score={z_score} | BB Position={bb_pos} | Score={ict_score}/5"
+
+            elif strategy == 'TREND_FOLLOW':
+                st_dir   = signal_data.get('supertrend_dir', 'N/A')
+                htf_bias = signal_data.get('htf_bias', 'N/A')
+                strategy_instructions = f"Konfirmasi Trend Following: Supertrend={st_dir} | HTF Bias={htf_bias} | Score={ict_score}/5"
+
+            elif strategy == 'FUNDING_RATE':
+                funding = signal_data.get('funding_rate', 0)
+                fr_bias = signal_data.get('funding_bias', 'N/A')
+                strategy_instructions = f"Konfirmasi Funding Rate: Rate={funding:.4f}% | Bias={fr_bias} | Score={ict_score}/5"
+
+            elif strategy == 'ORDERFLOW':
+                cvd_norm  = signal_data.get('cvd_normalized', 0)
+                price_roc = signal_data.get('price_roc', 0)
+                strategy_instructions = f"Konfirmasi Orderflow/CVD: CVD Normalized={cvd_norm} | Price ROC={price_roc:.2f}% | Score={ict_score}/5"
+
+            else:
+                strategy_instructions = f"Setup: {setup_type} | Score: {ict_score}"
+
+            # ── Final prompt ───────────────────────────────────────────────────
+            prompt = f"""Tulis analisis entry trade berikut dalam 1-2 kalimat singkat bahasa Indonesia. Langsung ke poin, padat, seperti trader senior yang kasih konfirmasi cepat ke rekannya. Gunakan <b> untuk istilah teknikal penting saja.
+
+=== DATA TRADE ===
+Symbol: {symbol} | Arah: {direction} | Strategy: {strategy_label}
+Setup: {setup_type} | Sesi: {session} | Leverage: {leverage}x
+Entry: ${entry:.6f} | TP: ${tp:.6f} | SL: ${sl:.6f}
+R:R: {rr:.2f} | ATR: {atr:.6f}
+
+{strategy_instructions}
+
+OUTPUT: Maksimal 2 kalimat HTML. Tidak ada bullet point, tidak ada heading. Langsung narasi."""
+
             response = await self._generate_response(prompt)
             return response
-            
+
         except Exception as e:
             print(f"❌ Error generating entry reasoning: {e}")
-            # CRITICAL: Re-raise error - entry reasoning is mandatory
             raise Exception(f"Entry reasoning failed: {e}")
     
     async def _get_indicator_analysis(self, symbol: str, direction: str) -> str:
@@ -635,155 +617,81 @@ class GeminiMarketAnalyst:
     async def generate_exit_reasoning(self, position_data: Dict, exit_reason: str) -> str:
         """Generate comprehensive AI reasoning for position exit in Indonesian"""
         try:
-            # Extract position data
-            symbol = position_data['symbol']
-            direction = position_data['direction']
-            entry_price = position_data['entry_price']
-            exit_price = position_data['exit_price']
-            pnl = position_data.get('realized_pnl', 0)
-            pnl_percentage = position_data.get('pnl_percentage', 0)
-            entry_time = position_data['entry_time']
+            symbol        = position_data['symbol']
+            direction     = position_data['direction']
+            entry_price   = position_data['entry_price']
+            exit_price    = position_data['exit_price']
+            pnl           = position_data.get('realized_pnl', 0)
+            pnl_pct       = position_data.get('pnl_percentage', 0)
+            entry_time    = position_data['entry_time']
             entry_indicators = position_data.get('entry_indicators', {})
-            
-            # Extract market data saat entry (if available)
-            entry_market_data = {
-                'market_cap': position_data.get('market_cap', 0),
-                'market_cap_category': position_data.get('market_cap_category', 'Unknown'),
-                'volume_24h': position_data.get('total_volume_24h', 0),
-                'volume_category': position_data.get('volume_category', 'Unknown'),
-                'price_change_24h': position_data.get('price_change_percentage_24h', 0),
-                'price_change_7d': position_data.get('price_change_percentage_7d', 0),
-                'liquidity_score': position_data.get('liquidity_score', 0),
-                'volatility_score': position_data.get('volatility_score', 0),
-                'market_dominance': position_data.get('market_dominance', 0),
-                'bybit_volume_24h': position_data.get('bybit_volume_24h', 0),
-                'bybit_turnover_24h': position_data.get('bybit_turnover_24h', 0)
-            }
-            
-            # CRITICAL: Analyze which indicators passed vs failed at entry
-            passed_at_entry = []
-            failed_at_entry = []
-            
-            if entry_indicators:
-                from indicator_analysis_system import IndicatorAnalysisSystem
-                analyzer = IndicatorAnalysisSystem()
-                passed_indicators, failed_indicators = analyzer.analyze_indicators(entry_indicators, direction)
-                
-                for indicator in passed_indicators:
-                    passed_at_entry.append(f"✅ {indicator['description']}: {indicator['actual']} (mendukung {direction})")
-                
-                for indicator in failed_indicators:
-                    failed_at_entry.append(f"❌ {indicator['description']}: {indicator['actual']} (tidak mendukung {direction})")
-            
-            passed_text = "\n".join(passed_at_entry) if passed_at_entry else "Data indikator entry tidak tersedia"
-            failed_text = "\n".join(failed_at_entry) if failed_at_entry else "Data indikator entry tidak tersedia"
-            
-            entry_pass_rate = (len(passed_at_entry) / (len(passed_at_entry) + len(failed_at_entry)) * 100) if (len(passed_at_entry) + len(failed_at_entry)) > 0 else 0
-            
-            # Calculate price movement
+
+            # ICT data dari saat entry
+            setup_type = entry_indicators.get('setup_type', position_data.get('setup_type', 'ICT'))
+            in_ob      = entry_indicators.get('in_order_block', position_data.get('in_order_block', False))
+            in_fvg     = entry_indicators.get('in_fvg', position_data.get('in_fvg', False))
+            liq        = entry_indicators.get('liquidity_confirmed', position_data.get('liquidity_confirmed', False))
+            bos        = entry_indicators.get('bos_confirmed', position_data.get('bos_confirmed', False))
+            choch      = entry_indicators.get('choch_detected', position_data.get('choch_detected', False))
+            kz         = entry_indicators.get('kill_zone_active', position_data.get('kill_zone_active', False))
+            ict_score  = entry_indicators.get('ict_score', position_data.get('ict_score', 0))
+            pd_zone    = entry_indicators.get('pd_zone', position_data.get('pd_zone', 'N/A'))
+            rr         = entry_indicators.get('rr_ratio', position_data.get('rr_ratio', 0))
+            session    = position_data.get('trading_session', 'N/A')
+
             price_change = ((exit_price - entry_price) / entry_price) * 100
             if direction == 'SHORT':
                 price_change = -price_change
-            
-            # Duration calculation
+
             duration = self._calculate_duration(entry_time, datetime.now())
-            
-            # Exit reason explanation
+
             exit_explanations = {
-                'TP_HIT': 'Target Profit tercapai',
-                'SL_HIT': 'Stop Loss terpicu',
-                'MANUAL': 'Penutupan manual',
-                'TIMEOUT': 'Timeout otomatis',
-                'ERROR': 'Error sistem'
+                'TP_HIT': 'Target Profit tercapai ✅',
+                'SL_HIT': 'Stop Loss terpicu ❌',
+                'MANUAL': 'Penutupan manual 🖐',
+                'TIMEOUT': 'Timeout otomatis ⏰',
+                'ERROR': 'Error sistem ⚠️'
             }
             exit_desc = exit_explanations.get(exit_reason, exit_reason)
-            
-            # Get comprehensive market analysis
-            market_analysis = await self._get_comprehensive_market_analysis(symbol, entry_time)
-            
-            # Get current technical indicators
-            current_technical = await self._get_current_technical_analysis(symbol)
-            
-            # Generate comprehensive reasoning
-            prompt = f"""
-            Analisis mendalam penutupan posisi trading ini dalam bahasa Indonesia:
-            
-            DETAIL POSISI:
-            - Symbol: {symbol}
-            - Arah: {direction}
-            - Entry: ${entry_price:.6f}
-            - Exit: ${exit_price:.6f}
-            - Alasan: {exit_desc}
-            - Durasi: {duration}
-            - PnL: ${pnl:.2f} ({pnl_percentage:.2f}%)
-            - Pergerakan Harga: {price_change:.2f}%
-            
-            ANALISIS INDIKATOR SAAT ENTRY:
-            Pass Rate Entry: {entry_pass_rate:.1f}% ({len(passed_at_entry)} passed, {len(failed_at_entry)} failed)
-            
-            INDIKATOR YANG MENDUKUNG {direction} SAAT ENTRY (PASSED):
-            {passed_text}
-            
-            INDIKATOR YANG TIDAK MENDUKUNG {direction} SAAT ENTRY (FAILED):
-            {failed_text}
-            
-            DATA MARKET SAAT ENTRY:
-            - Market Cap: ${entry_market_data['market_cap']:,.0f} ({entry_market_data['market_cap_category']})
-            - Volume 24h: ${entry_market_data['volume_24h']:,.0f} ({entry_market_data['volume_category']})
-            - Perubahan 24h saat entry: {entry_market_data['price_change_24h']:.2f}%
-            - Perubahan 7d saat entry: {entry_market_data['price_change_7d']:.2f}%
-            - Bybit Volume 24h: ${entry_market_data['bybit_volume_24h']:,.0f}
-            - Bybit Turnover 24h: ${entry_market_data['bybit_turnover_24h']:,.0f}
-            - Liquidity Score: {entry_market_data['liquidity_score']:.1f}
-            - Volatility Score: {entry_market_data['volatility_score']:.1f}
-            - Market Dominance: {entry_market_data['market_dominance']:.1f}%
-            
-            DATA MARKET SAAT EXIT:
-            {market_analysis}
-            
-            KONDISI TEKNIKAL SAAT EXIT:
-            {current_technical}
-            
-            Berikan analisis komprehensif dalam format HTML:
-            
-            <b>📊 Ringkasan Eksekusi:</b><br>
-            Posisi trading {symbol} {direction} berhasil ditutup dengan {exit_desc}. Analisis pergerakan harga {price_change:.2f}% dan dampaknya terhadap PnL {pnl_percentage:.2f}%. WAJIB sebutkan data perubahan 24h dan volume dari data market yang diberikan.<br><br>
-            
-            <b>📈 Analisis Perubahan Market:</b><br>
-            Bandingkan kondisi market saat entry vs exit berdasarkan data yang diberikan. Data market saat entry sudah tersedia (market cap, volume, perubahan 24h/7d, liquidity score, dll). Sebutkan secara spesifik perbandingan perubahan 24h saat entry vs exit, volume saat entry vs exit, dan bagaimana perubahan dalam 1 jam terakhir mempengaruhi hasil trade. Fokus pada momentum jangka pendek yang relevan untuk scalping.<br><br>
-            
-            <b>🔍 Evaluasi Indikator Teknikal:</b><br>
-            Pada saat entry, sinyal teknikal menunjukkan kondisi dengan {entry_pass_rate:.1f}% pass rate. {len(passed_at_entry)} indikator mendukung {direction} sementara {len(failed_at_entry)} tidak mendukung. Analisis bagaimana kondisi teknikal berubah dari entry hingga exit berdasarkan data yang diberikan.<br><br>
-            
-            <b>⚡ Faktor Volatilitas dan Timing:</b><br>
-            Evaluasi tingkat volatilitas dalam 1 jam terakhir berdasarkan data teknikal. Bagaimana volatilitas dan timing dalam timeframe pendek mempengaruhi hasil dengan durasi {duration}? Analisis momentum jangka pendek dan perubahan harga dalam 1 jam.<br><br>
-            
-            <b>🎯 Analisis Risk Management:</b><br>
-            Evaluasi efektivitas strategi TP/SL berdasarkan kondisi market yang sebenarnya. Sebutkan data funding rate dan open interest dalam analisis.<br><br>
-            
-            <b>💡 Insight dan Rekomendasi:</b><br>
-            Berikan insight mendalam berdasarkan kualitas sinyal entry ({entry_pass_rate:.1f}% pass rate) dan kondisi market spesifik ini. Apa pelajaran dari trade ini?
-            
-            PENTING:
-            - Gunakan SEMUA data market, indikator, dan teknikal yang diberikan
-            - Sebutkan angka-angka spesifik dari data (perubahan 24h, volume, dll)
-            - Berikan analisis yang sangat detail dan komprehensif (500-600 kata)
-            - Gunakan HTML formatting: <b>bold</b>, <br> untuk line break
-            - Bahasa Indonesia yang profesional dan analitis
-            - JANGAN gunakan format markdown atau code blocks
-            - Fokus pada kualitas sinyal entry dan bagaimana itu mempengaruhi hasil
-            """
-            
+
+            # ICT entry checklist
+            ict_entry = [
+                f"{'✅' if bos else '❌'} BOS terkonfirmasi saat entry",
+                f"{'✅' if choch else '❌'} CHoCH terkonfirmasi saat entry",
+                f"{'✅' if in_ob else '❌'} Entry di Order Block",
+                f"{'✅' if in_fvg else '❌'} Entry di Fair Value Gap",
+                f"{'✅' if liq else '❌'} Liquidity sweep terkonfirmasi",
+                f"{'✅' if kz else '❌'} Kill Zone aktif saat entry",
+                f"📍 PD Zone: {pd_zone} | ICT Score: {ict_score}/11 | R:R: {rr:.2f}",
+            ]
+            ict_entry_text = '\n'.join(ict_entry)
+
+            prompt = f"""Kamu adalah trader ICT/SMC profesional. Tulis analisis hasil trade berikut dalam bahasa Indonesia yang mengalir natural seperti seorang trader senior sedang mereview trade-nya — bukan laporan formal, bukan daftar poin bernomor. Gunakan paragraf yang mengalir, padat, dan tajam.
+
+=== HASIL TRADE ===
+Symbol: {symbol} | Arah: {direction} | Setup: {setup_type}
+Sesi Entry: {session} | Durasi: {duration}
+Entry: ${entry_price:.6f} → Exit: ${exit_price:.6f} ({price_change:+.2f}%)
+PnL: ${pnl:.2f} ({pnl_pct:.2f}%) | Status: {exit_desc}
+
+=== KONDISI ICT SAAT ENTRY ===
+{ict_entry_text}
+
+Format output HTML — tulis dalam 3-4 paragraf mengalir tanpa heading bernomor. Gunakan <b> hanya untuk menekankan istilah teknikal penting. Pisahkan paragraf dengan <br><br>.
+
+Paragraf pertama: evaluasi hasil trade — apakah {exit_reason} sesuai ekspektasi setup ICT, bagaimana pergerakan harga dari entry ke exit.
+Paragraf kedua: analisis apakah konfirmasi ICT saat entry (BOS/CHoCH, OB, FVG, liquidity sweep) terbukti valid atau tidak, dan apa yang terjadi di market.
+Paragraf ketiga: evaluasi kualitas setup dan eksekusi — apa yang bekerja baik dan apa yang bisa diperbaiki.
+Paragraf keempat: insight konkret untuk setup {setup_type} serupa ke depannya.
+
+PENTING: Jangan gunakan angka di depan paragraf. Jangan gunakan bullet point. Tulis seperti narasi analisis profesional."""
+
             response = await self._generate_response(prompt)
-            
-            # Clean up any unwanted formatting
-            if response.startswith('```html'):
-                response = response.replace('```html', '').replace('```', '').strip()
-            if response.startswith('<html>'):
-                response = response.replace('<html>', '').strip()
-            if response.endswith('</html>'):
-                response = response.replace('</html>', '').strip()
-            
+
+            # Clean up formatting
+            for tag in ['```html', '```', '<html>', '</html>']:
+                response = response.replace(tag, '')
+            response = response.strip()
             # Remove leading <br> tags and whitespace
             response = response.strip()
             while response.startswith('<br>') or response.startswith('<br/>') or response.startswith('<br />') or response.startswith('<p>'):
@@ -822,37 +730,13 @@ class GeminiMarketAnalyst:
             # Try with different model parameters
             try:
                 # Retry with more aggressive settings
-                simple_prompt = f"""
-                WAJIB analisis mendalam penutupan posisi {position_data.get('symbol', 'N/A')} {position_data.get('direction', 'N/A')}:
-                
-                DETAIL POSISI:
-                - Entry: ${position_data.get('entry_price', 0):.6f}
-                - Exit: ${position_data.get('exit_price', 0):.6f}  
-                - PnL: ${position_data.get('realized_pnl', 0):.2f} ({position_data.get('pnl_percentage', 0):.2f}%)
-                - Alasan: {exit_reason}
-                
-                WAJIB berikan analisis komprehensif dalam format HTML:
-                
-                <b>📊 Ringkasan Eksekusi:</b><br>
-                Analisis detail hasil trade {position_data.get('symbol', 'N/A')} {position_data.get('direction', 'N/A')} dengan PnL {position_data.get('pnl_percentage', 0):.2f}%. Jelaskan pergerakan harga dan dampak terhadap hasil trading.<br><br>
-                
-                <b>📈 Analisis Perubahan Market:</b><br>
-                Evaluasi kondisi market saat exit, termasuk volume, volatilitas, dan faktor fundamental yang mempengaruhi pergerakan harga selama posisi terbuka.<br><br>
-                
-                <b>🔍 Evaluasi Indikator Teknikal:</b><br>
-                Analisis indikator teknikal (RSI, EMA, MACD) dari saat entry hingga exit. Bagaimana perubahan sinyal mempengaruhi hasil trade.<br><br>
-                
-                <b>⚡ Faktor Volatilitas dan Timing:</b><br>
-                Evaluasi tingkat volatilitas dan timing exit. Apakah exit dilakukan pada momentum yang tepat berdasarkan kondisi market.<br><br>
-                
-                <b>🎯 Analisis Risk Management:</b><br>
-                Evaluasi efektivitas strategi TP/SL dan manajemen risiko berdasarkan hasil aktual trade ini.<br><br>
-                
-                <b>💡 Insight dan Rekomendasi:</b><br>
-                Insight mendalam dan rekomendasi spesifik untuk trading selanjutnya berdasarkan pembelajaran dari trade ini.
-                
-                PENTING: Gunakan bahasa Indonesia, format HTML, minimal 400 kata, analisis yang sangat detail.
-                """
+                simple_prompt = f"""Tulis analisis penutupan posisi {position_data.get('symbol', 'N/A')} {position_data.get('direction', 'N/A')} dalam bahasa Indonesia yang natural dan mengalir seperti trader profesional — tanpa nomor, tanpa bullet point, hanya paragraf.
+
+Detail trade:
+Entry: ${position_data.get('entry_price', 0):.6f} | Exit: ${position_data.get('exit_price', 0):.6f}
+PnL: ${position_data.get('realized_pnl', 0):.2f} ({position_data.get('pnl_percentage', 0):.2f}%) | Alasan: {exit_reason}
+
+Tulis 3 paragraf HTML dipisah <br><br>. Gunakan <b> hanya untuk istilah teknikal penting. Bahas hasil trade, evaluasi setup, dan insight untuk ke depannya. Jangan gunakan heading bernomor."""
                 
                 retry_response = await self._generate_response(simple_prompt)
                 

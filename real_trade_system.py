@@ -51,7 +51,8 @@ class RealTradeSystem:
             self._bybit_session = HTTP(
                 testnet=False,  # MAINNET untuk real trading
                 api_key=BYBIT_API_KEY,
-                api_secret=BYBIT_API_SECRET
+                api_secret=BYBIT_API_SECRET,
+                domain="bytick"
             )
         return self._bybit_session
     

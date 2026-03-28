@@ -720,7 +720,7 @@
             </div>
             
             <nav class="space-y-2">
-                <div class="sidebar-item active p-4 rounded-lg cursor-pointer" onclick="switchMode('dry-run')" id="nav-dry-run" title="Dry Run Mode">
+                <div class="sidebar-item active p-4 rounded-lg cursor-pointer" onclick="switchMode('dry-run')" id="nav-dry-run" title="Paper Trading">
                     <div class="flex items-center space-x-3">
                         <i class="fas fa-flask text-yellow-500 sidebar-icon"></i>
                         <div class="sidebar-text">
@@ -797,19 +797,6 @@
                         </div>
                     </div>
                     
-                    <!-- Start/Stop Buttons -->
-                    <div class="flex space-x-2 trading-control-buttons">
-                        <button class="flex-1 bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg text-sm font-semibold transition-colors" 
-                                onclick="startTrading()" id="start-trading-btn">
-                            <i class="fas fa-play mr-1"></i>
-                            <span class="sidebar-text">Start</span>
-                        </button>
-                        <button class="flex-1 bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg text-sm font-semibold transition-colors" 
-                                onclick="stopTrading()" id="stop-trading-btn">
-                            <i class="fas fa-stop mr-1"></i>
-                            <span class="sidebar-text">Stop</span>
-                        </button>
-                    </div>
                 </div>
                 
                 <hr class="border-gray-700 my-4">
@@ -965,7 +952,7 @@
                         <div class="flex items-center space-x-2">
                             <i class="fas fa-info-circle text-blue-500"></i>
                             <span class="text-sm text-gray-300">Mode:</span>
-                            <span class="font-semibold text-yellow-500" id="indicator-current-mode">Dry Run</span>
+                            <span class="font-semibold text-yellow-500" id="indicator-current-mode">Paper Trading</span>
                         </div>
                         <div class="flex items-center space-x-2">
                             <i class="fas fa-calendar text-green-500"></i>
@@ -1015,7 +1002,7 @@
                         <div class="flex items-center space-x-2">
                             <i class="fas fa-info-circle text-blue-500"></i>
                             <span class="text-sm text-gray-300">Mode:</span>
-                            <span class="font-semibold text-yellow-500" id="pair-current-mode">Dry Run</span>
+                            <span class="font-semibold text-yellow-500" id="pair-current-mode">Paper Trading</span>
                         </div>
                         <div class="flex items-center space-x-2">
                             <i class="fas fa-calendar text-green-500"></i>
@@ -1063,7 +1050,7 @@
                         <div class="flex items-center space-x-2">
                             <i class="fas fa-info-circle text-blue-500"></i>
                             <span class="text-sm text-gray-300">Mode:</span>
-                            <span class="font-semibold text-yellow-500" id="session-current-mode">Dry Run</span>
+                            <span class="font-semibold text-yellow-500" id="session-current-mode">Paper Trading</span>
                         </div>
                         <div class="flex items-center space-x-2">
                             <i class="fas fa-calendar text-green-500"></i>
@@ -1110,7 +1097,7 @@
                     <div class="flex items-center space-x-2">
                         <i class="fas fa-info-circle text-blue-500"></i>
                         <span class="text-sm text-gray-300">Mode Saat Ini:</span>
-                        <span class="font-semibold text-yellow-500" id="ai-current-mode">Dry Run</span>
+                        <span class="font-semibold text-yellow-500" id="ai-current-mode">Paper Trading</span>
                     </div>
                     <div class="text-xs text-gray-400">
                         AI akan menganalisis data dari mode trading yang dipilih
@@ -1210,12 +1197,12 @@
             // Start notification polling
             startNotificationPolling();
             
-            // Auto refresh dashboard setiap 30 detik (backup untuk Socket.IO)
+            // Auto refresh dashboard setiap 10 detik (backup untuk Socket.IO)
             setInterval(() => {
                 console.log('🔄 Auto refresh dashboard data...');
                 loadInitialData();
                 updateLastRefresh(); // Update timestamp untuk auto refresh
-            }, 30000); // 30 seconds
+            }, 10000); // 10 seconds
         });
         
         // Socket event handlers
@@ -1319,7 +1306,7 @@
             const modeIndicator = document.getElementById('indicator-current-mode');
             
             // Update mode indicator
-            modeIndicator.textContent = currentMode === 'dry-run' ? 'Simulasi (Dry Run)' : 'Trading Nyata';
+            modeIndicator.textContent = currentMode === 'dry-run' ? 'Paper Trading' : 'Trading Nyata';
             
             // Show modal
             modal.classList.remove('hidden');
@@ -1483,7 +1470,7 @@
             const modeIndicator = document.getElementById('pair-current-mode');
             
             // Update mode indicator
-            modeIndicator.textContent = currentMode === 'dry-run' ? 'Simulasi (Dry Run)' : 'Trading Nyata';
+            modeIndicator.textContent = currentMode === 'dry-run' ? 'Paper Trading' : 'Trading Nyata';
             
             // Show modal
             modal.classList.remove('hidden');
@@ -1678,7 +1665,7 @@
             const modeIndicator = document.getElementById('session-current-mode');
             
             // Update mode indicator
-            modeIndicator.textContent = currentMode === 'dry-run' ? 'Simulasi (Dry Run)' : 'Trading Nyata';
+            modeIndicator.textContent = currentMode === 'dry-run' ? 'Paper Trading' : 'Trading Nyata';
             
             // Show modal
             modal.classList.remove('hidden');
@@ -1902,7 +1889,7 @@
             const modeIndicator = document.getElementById('ai-current-mode');
             
             // Update mode indicator
-            modeIndicator.textContent = currentMode === 'dry-run' ? 'Simulasi (Dry Run)' : 'Trading Nyata';
+            modeIndicator.textContent = currentMode === 'dry-run' ? 'Paper Trading' : 'Trading Nyata';
             
             // Show modal
             modal.classList.remove('hidden');
@@ -2249,7 +2236,7 @@
                             <i class="fas fa-list text-cyan-500 text-2xl"></i>
                         </div>
                         <div class="mt-2">
-                            <span class="text-sm text-gray-400">Max: 20 positions</span>
+                            <span class="text-sm text-gray-400">Max: 10 positions</span>
                         </div>
                     </div>
                 </div>
@@ -2514,13 +2501,27 @@
         // Function to format local time (already in WIB)
         function formatToWIB(timeString) {
             const date = new Date(timeString);
+            // Jika string tidak ada timezone info, anggap sudah WIB
             return date.toLocaleString('id-ID', {
                 day: '2-digit',
                 month: '2-digit', 
                 year: 'numeric',
                 hour: '2-digit',
-                minute: '2-digit'
+                minute: '2-digit',
+                timeZone: 'Asia/Jakarta'
             });
+        }
+
+        function formatDuration(entryTimeString) {
+            const entry = new Date(entryTimeString);
+            const now = new Date();
+            const diffMs = now - entry;
+            if (diffMs < 0) return '0m';
+            const totalMin = Math.floor(diffMs / 60000);
+            const h = Math.floor(totalMin / 60);
+            const m = totalMin % 60;
+            if (h > 0) return `${h}j ${m}m`;
+            return `${m}m`;
         }
         
         function updateOpenPositions(positions) {
@@ -2539,7 +2540,6 @@
             }
             
             tbody.innerHTML = positions.map(pos => {
-                const duration = Math.floor((new Date() - new Date(pos.entry_time)) / (1000 * 60));
                 const pnlClass = pos.unrealized_pnl >= 0 ? 'profit' : 'loss';
                 
                 return `
@@ -2560,7 +2560,7 @@
                             <div>$${pos.unrealized_pnl.toFixed(2)}</div>
                             <div class="text-xs">(${pos.pnl_percentage.toFixed(2)}%)</div>
                         </td>
-                        <td class="py-3 px-4 text-sm text-gray-400">${duration}m</td>
+                        <td class="py-3 px-4 text-sm text-gray-400">${formatDuration(pos.entry_time)}</td>
                         <td class="py-3 px-4 text-xs text-gray-400">
                             <div>${formatToWIB(pos.entry_time)}</div>
                         </td>
@@ -2664,7 +2664,7 @@
                                 ${trade.exit_reason}
                             </span>
                         </td>
-                        <td class="py-3 px-4 text-sm text-gray-400">${trade.duration_minutes}m</td>
+                        <td class="py-3 px-4 text-sm text-gray-400">${(() => { const h = Math.floor(trade.duration_minutes / 60); const m = trade.duration_minutes % 60; return h > 0 ? `${h}j ${m}m` : `${m}m`; })()}</td>
                         <td class="py-3 px-4 text-xs text-gray-400">
                             <div>${formatToWIB(trade.entry_time)}</div>
                         </td>
@@ -3015,8 +3015,144 @@
         }
         
         function showIndicatorDetails(tradeId, symbol, direction, indicators, aiEntryReasoning = '', aiExitReasoning = '') {
-            // Set trade info
-            document.getElementById('modalTradeInfo').textContent = `${symbol} ${direction} Trade Analysis`;
+            document.getElementById('modalTradeInfo').textContent = `${symbol} ${direction} — ICT/SMC Analysis`;
+
+            const summaryContainer  = document.getElementById('signalSummary');
+            const passedContainer   = document.getElementById('passedIndicators');
+            const failedContainer   = document.getElementById('failedIndicators');
+            const valuesContainer   = document.getElementById('indicatorValues');
+
+            passedContainer.innerHTML  = '';
+            failedContainer.innerHTML  = '';
+            valuesContainer.innerHTML  = '';
+
+            // ── ICT Confluence Labels ──────────────────────────────
+            const ictLabels = {
+                'bos_confirmed':       { label: 'BOS (Break of Structure)',    icon: '📐' },
+                'choch_detected':      { label: 'CHoCH (Change of Character)', icon: '🔄' },
+                'in_order_block':      { label: 'Order Block (OB)',             icon: '🟦' },
+                'in_fvg':              { label: 'Fair Value Gap (FVG)',         icon: '⬜' },
+                'liquidity_confirmed': { label: 'Liquidity Sweep',             icon: '💧' },
+                'kill_zone_active':    { label: 'Kill Zone aktif',             icon: '🎯' },
+                'trend_alignment':     { label: 'Trend Alignment (BOS arah)',  icon: '📈' },
+                'momentum_confirmation':{ label: 'Momentum (Liquidity)',       icon: '⚡' },
+                'price_near_support':  { label: 'Harga di Support / OB',      icon: '🟢' },
+                'price_near_resistance':{ label: 'Harga di Resistance / OB',  icon: '🔴' },
+            };
+
+            const numericLabels = {
+                'ict_score':                 'ICT Confluence Score',
+                'fib_position_pct':          'Posisi Fibonacci (%)',
+                'atr_value':                 'ATR Daily',
+                'sl_percent':                'SL Distance (%)',
+                'rr_ratio':                  'Risk:Reward Ratio',
+                'price_distance_from_level': 'Jarak dari OB/FVG',
+                'support_resistance':        'Level OB/FVG',
+            };
+
+            const pdZone   = indicators['pd_zone']        || 'N/A';
+            const bias     = indicators['bias_structure']  || 'N/A';
+            const ictScore = indicators['ict_score']       || 0;
+            const setup    = indicators['setup_type']      || 'ICT';
+            const session  = indicators['session']         || 'N/A';
+
+            const passed = [], failed = [], nums = [];
+
+            Object.entries(indicators).forEach(([key, val]) => {
+                if (key in ictLabels) {
+                    const { label, icon } = ictLabels[key];
+                    const ok = Boolean(val);
+                    (ok ? passed : failed).push({ key, label, icon, val: ok });
+                } else if (key in numericLabels && typeof val === 'number') {
+                    nums.push({ key, label: numericLabels[key], val });
+                }
+            });
+
+            // Render passed
+            if (passed.length > 0) {
+                passed.forEach(({ label, icon }) => {
+                    const d = document.createElement('div');
+                    d.className = 'flex items-center space-x-2 p-2 bg-green-500/10 rounded border border-green-500/30';
+                    d.innerHTML = `<span class="text-green-400">${icon} ✅</span><span class="text-sm">${label}</span>`;
+                    passedContainer.appendChild(d);
+                });
+            } else {
+                passedContainer.innerHTML = '<p class="text-gray-500 text-sm">Tidak ada konfirmasi ICT</p>';
+            }
+
+            // Render failed
+            if (failed.length > 0) {
+                failed.forEach(({ label, icon }) => {
+                    const d = document.createElement('div');
+                    d.className = 'flex items-center space-x-2 p-2 bg-red-500/10 rounded border border-red-500/30';
+                    d.innerHTML = `<span class="text-red-400">${icon} ❌</span><span class="text-sm">${label}</span>`;
+                    failedContainer.appendChild(d);
+                });
+            } else {
+                failedContainer.innerHTML = '<p class="text-gray-500 text-sm">Semua konfirmasi terpenuhi</p>';
+            }
+
+            // Render numerics
+            nums.forEach(({ label, val, key }) => {
+                const d = document.createElement('div');
+                d.className = 'p-2 bg-blue-500/10 rounded border border-blue-500/30';
+                let display = typeof val === 'number' ? (Number.isInteger(val) ? val : val.toFixed(key === 'fib_position_pct' || key === 'sl_percent' ? 1 : 4)) : val;
+                d.innerHTML = `<div class="text-xs text-gray-400">${label}</div><div class="text-sm font-bold text-white">${display}</div>`;
+                valuesContainer.appendChild(d);
+            });
+
+            // Score bar
+            const maxScore = 11;
+            const pct = Math.round((ictScore / maxScore) * 100);
+            const scoreColor = pct >= 70 ? 'text-green-400' : pct >= 45 ? 'text-yellow-400' : 'text-red-400';
+            const bar = '█'.repeat(ictScore) + '░'.repeat(Math.max(0, maxScore - ictScore));
+
+            summaryContainer.innerHTML = `
+                <div class="grid grid-cols-2 gap-3 mb-4">
+                    <div class="p-3 bg-gray-800 rounded">
+                        <div class="text-xs text-gray-400">Setup</div>
+                        <div class="text-sm font-bold text-teal-400">${setup}</div>
+                    </div>
+                    <div class="p-3 bg-gray-800 rounded">
+                        <div class="text-xs text-gray-400">Sesi</div>
+                        <div class="text-sm font-bold text-white">${session}</div>
+                    </div>
+                    <div class="p-3 bg-gray-800 rounded">
+                        <div class="text-xs text-gray-400">Bias (Daily)</div>
+                        <div class="text-sm font-bold ${bias === 'BULLISH' ? 'text-green-400' : bias === 'BEARISH' ? 'text-red-400' : 'text-gray-400'}">${bias}</div>
+                    </div>
+                    <div class="p-3 bg-gray-800 rounded">
+                        <div class="text-xs text-gray-400">PD Zone</div>
+                        <div class="text-sm font-bold ${pdZone === 'DISCOUNT' ? 'text-green-400' : pdZone === 'PREMIUM' ? 'text-red-400' : 'text-yellow-400'}">${pdZone}</div>
+                    </div>
+                </div>
+                <div class="p-3 bg-gray-800 rounded mb-4">
+                    <div class="text-xs text-gray-400 mb-1">ICT Confluence Score</div>
+                    <div class="text-lg font-bold ${scoreColor}">${ictScore}/${maxScore}</div>
+                    <div class="text-xs font-mono text-gray-400 mt-1">${bar}</div>
+                </div>
+            `;
+
+            // AI Reasoning
+            if (aiEntryReasoning || aiExitReasoning) {
+                if (aiEntryReasoning) {
+                    summaryContainer.innerHTML += `
+                        <div class="mb-3 p-3 bg-teal-500/10 rounded border border-teal-500/30">
+                            <div class="text-xs text-teal-400 font-semibold mb-1">🤖 AI Entry Analysis</div>
+                            <div class="text-sm text-gray-300 leading-relaxed">${aiEntryReasoning.replace(/\n/g, '<br>')}</div>
+                        </div>`;
+                }
+                if (aiExitReasoning) {
+                    summaryContainer.innerHTML += `
+                        <div class="p-3 bg-orange-500/10 rounded border border-orange-500/30">
+                            <div class="text-xs text-orange-400 font-semibold mb-1">🤖 AI Exit Analysis</div>
+                            <div class="text-sm text-gray-300 leading-relaxed">${aiExitReasoning.replace(/\n/g, '<br>')}</div>
+                        </div>`;
+                }
+            }
+
+            document.getElementById('indicatorModal').classList.remove('hidden');
+        }
             
             // Parse indicators
             const passedContainer = document.getElementById('passedIndicators');
@@ -3029,286 +3165,6 @@
             failedContainer.innerHTML = '';
             valuesContainer.innerHTML = '';
             
-            // Define indicator descriptions
-            const indicatorDescriptions = {
-                'ema_fast_above_slow': 'EMA Fast > EMA Slow (Trend Direction)',
-                'macd_bullish': 'MACD Line > Signal Line (Momentum)',
-                'rsi_oversold': 'RSI Oversold (<30)',
-                'rsi_overbought': 'RSI Overbought (>70)',
-                'rsi_neutral': 'RSI Neutral Zone (30-70)',
-                'price_near_support': 'Price Near Support Level',
-                'price_near_resistance': 'Price Near Resistance Level',
-                'volume_confirmation': 'Volume Confirmation',
-                'trend_alignment': 'Trend Alignment',
-                'momentum_confirmation': 'Momentum Confirmation',
-                'rsi_level': 'RSI Level',
-                'atr_value': 'Average True Range (Volatility)',
-                'ema_fast_value': 'EMA Fast Value',
-                'ema_slow_value': 'EMA Slow Value',
-                'macd_line_value': 'MACD Line Value',
-                'signal_line_value': 'Signal Line Value',
-                'support_resistance': 'Support/Resistance Level',
-                'price_distance_from_level': 'Distance from Key Level (%)'
-            };
-            
-            // Strategy-based logic - SESUAI KONDISI MARKET YANG MENYEBABKAN SINYAL
-            const passed = [];
-            const failed = [];
-            const values = [];
-            
-            Object.entries(indicators).forEach(([key, value]) => {
-                const description = indicatorDescriptions[key] || key.replace(/_/g, ' ').toUpperCase();
-                
-                if (typeof value === 'boolean') {
-                    let isPassed = false;
-                    let reason = '';
-                    
-                    // STRATEGY ANALYSIS - Berdasarkan kondisi yang benar-benar terjadi
-                    if (direction === 'LONG') {
-                        // LONG Strategy Requirements (dari analyze_symbol):
-                        // Kondisi 1: ema_bullish AND macd_bullish AND rsi_neutral AND volume_ok AND volatility_ok
-                        // Kondisi 2: ema_bullish AND rsi_oversold AND volume_ok
-                        
-                        switch(key) {
-                            case 'ema_fast_above_slow':
-                                isPassed = value; // Harus TRUE untuk LONG (ema_bullish)
-                                reason = value ? 'Bullish trend required for LONG' : 'Need bullish trend for LONG signal';
-                                break;
-                            case 'macd_bullish':
-                                isPassed = value; // Harus TRUE untuk LONG kondisi 1
-                                reason = value ? 'Bullish momentum supports LONG' : 'Bearish momentum (OK if RSI oversold)';
-                                break;
-                            case 'rsi_neutral':
-                                isPassed = value; // TRUE untuk kondisi 1
-                                reason = value ? 'RSI in neutral range (35-65)' : 'RSI outside neutral range';
-                                break;
-                            case 'rsi_oversold':
-                                isPassed = value; // TRUE untuk kondisi 2
-                                reason = value ? 'RSI oversold - good LONG entry' : 'RSI not oversold';
-                                break;
-                            case 'rsi_overbought':
-                                isPassed = !value; // Harus FALSE untuk LONG
-                                reason = !value ? 'RSI not overbought (good for LONG)' : 'RSI overbought (bad for LONG)';
-                                break;
-                            case 'volume_confirmation':
-                                isPassed = value; // Harus TRUE
-                                reason = value ? 'Volume above average' : 'Volume below average';
-                                break;
-                            case 'volatility_confirmation':
-                                isPassed = value; // Harus TRUE untuk kondisi 1
-                                reason = value ? 'Sufficient volatility for scalping' : 'Low volatility';
-                                break;
-                            case 'trend_alignment':
-                                isPassed = value; // Sudah dihitung: LONG AND ema_bullish
-                                reason = value ? 'Trend aligned with LONG direction' : 'Trend not aligned';
-                                break;
-                            case 'momentum_confirmation':
-                                isPassed = value; // Sudah dihitung: LONG AND macd_bullish
-                                reason = value ? 'Momentum aligned with LONG direction' : 'Momentum not aligned';
-                                break;
-                            default:
-                                isPassed = value;
-                                reason = value ? 'Condition met' : 'Condition not met';
-                        }
-                        
-                    } else if (direction === 'SHORT') {
-                        // SHORT Strategy Requirements (dari analyze_symbol):
-                        // Kondisi 1: ema_bearish AND macd_bearish AND rsi_neutral AND volume_ok AND volatility_ok
-                        // Kondisi 2: ema_bearish AND rsi_overbought AND volume_ok
-                        
-                        switch(key) {
-                            case 'ema_fast_above_slow':
-                                isPassed = !value; // Harus FALSE untuk SHORT (ema_bearish)
-                                reason = !value ? 'Bearish trend required for SHORT' : 'Need bearish trend for SHORT signal';
-                                break;
-                            case 'macd_bullish':
-                                isPassed = !value; // Harus FALSE untuk SHORT kondisi 1
-                                reason = !value ? 'Bearish momentum supports SHORT' : 'Bullish momentum (OK if RSI overbought)';
-                                break;
-                            case 'rsi_neutral':
-                                isPassed = value; // TRUE untuk kondisi 1
-                                reason = value ? 'RSI in neutral range (35-65)' : 'RSI outside neutral range';
-                                break;
-                            case 'rsi_overbought':
-                                isPassed = value; // TRUE untuk kondisi 2
-                                reason = value ? 'RSI overbought - good SHORT entry' : 'RSI not overbought';
-                                break;
-                            case 'rsi_oversold':
-                                isPassed = !value; // Harus FALSE untuk SHORT
-                                reason = !value ? 'RSI not oversold (good for SHORT)' : 'RSI oversold (bad for SHORT)';
-                                break;
-                            case 'volume_confirmation':
-                                isPassed = value; // Harus TRUE
-                                reason = value ? 'Volume above average' : 'Volume below average';
-                                break;
-                            case 'volatility_confirmation':
-                                isPassed = value; // Harus TRUE untuk kondisi 1
-                                reason = value ? 'Sufficient volatility for scalping' : 'Low volatility';
-                                break;
-                            case 'trend_alignment':
-                                isPassed = value; // Sudah dihitung: SHORT AND ema_bearish
-                                reason = value ? 'Trend aligned with SHORT direction' : 'Trend not aligned';
-                                break;
-                            case 'momentum_confirmation':
-                                isPassed = value; // Sudah dihitung: SHORT AND macd_bearish
-                                reason = value ? 'Momentum aligned with SHORT direction' : 'Momentum not aligned';
-                                break;
-                            default:
-                                isPassed = value;
-                                reason = value ? 'Condition met' : 'Condition not met';
-                        }
-                    }
-                    
-                    if (isPassed) {
-                        passed.push({ key, description, value, reason });
-                    } else {
-                        failed.push({ key, description, value, reason });
-                    }
-                } else {
-                    values.push({ key, description, value });
-                }
-            });
-            
-            // Populate passed indicators
-            if (passed.length > 0) {
-                passed.forEach(indicator => {
-                    const div = document.createElement('div');
-                    div.className = 'flex flex-col space-y-1 p-3 bg-green-500/10 rounded border border-green-500/30';
-                    div.innerHTML = `
-                        <div class="flex items-center space-x-2">
-                            <i class="fas fa-check text-green-500"></i>
-                            <span class="text-sm font-medium">${indicator.description}</span>
-                        </div>
-                        <div class="text-xs text-gray-400 ml-6">
-                            Value: ${indicator.value} - ${indicator.reason || 'Condition met'}
-                        </div>
-                    `;
-                    passedContainer.appendChild(div);
-                });
-            } else {
-                passedContainer.innerHTML = '<p class="text-gray-500 text-sm">No indicators passed</p>';
-            }
-            
-            // Populate failed indicators
-            if (failed.length > 0) {
-                failed.forEach(indicator => {
-                    const div = document.createElement('div');
-                    div.className = 'flex flex-col space-y-1 p-3 bg-red-500/10 rounded border border-red-500/30';
-                    div.innerHTML = `
-                        <div class="flex items-center space-x-2">
-                            <i class="fas fa-times text-red-500"></i>
-                            <span class="text-sm font-medium">${indicator.description}</span>
-                        </div>
-                        <div class="text-xs text-gray-400 ml-6">
-                            Value: ${indicator.value} - ${indicator.reason || 'Condition not met'}
-                        </div>
-                    `;
-                    failedContainer.appendChild(div);
-                });
-            } else {
-                failedContainer.innerHTML = '<p class="text-gray-500 text-sm">No indicators failed</p>';
-            }
-            
-            // Populate values
-            values.forEach(indicator => {
-                const div = document.createElement('div');
-                div.className = 'p-3 bg-blue-500/10 rounded border border-blue-500/30';
-                div.innerHTML = `
-                    <div class="text-sm font-semibold text-blue-400">${indicator.description}</div>
-                    <div class="text-lg font-bold text-white">${typeof indicator.value === 'number' ? indicator.value.toFixed(6) : indicator.value}</div>
-                `;
-                valuesContainer.appendChild(div);
-            });
-            
-            // Generate signal summary
-            const totalIndicators = passed.length + failed.length;
-            const passRate = totalIndicators > 0 ? (passed.length / totalIndicators * 100).toFixed(1) : 0;
-            
-            let signalStrength = 'WEAK';
-            let strengthColor = 'text-red-500';
-            
-            if (passRate >= 80) {
-                signalStrength = 'VERY STRONG';
-                strengthColor = 'text-green-500';
-            } else if (passRate >= 60) {
-                signalStrength = 'STRONG';
-                strengthColor = 'text-green-400';
-            } else if (passRate >= 40) {
-                signalStrength = 'MODERATE';
-                strengthColor = 'text-yellow-500';
-            }
-            
-            summaryContainer.innerHTML = `
-                <div class="grid grid-cols-2 gap-4">
-                    <div>
-                        <div class="text-sm text-gray-400">Signal Strength</div>
-                        <div class="text-lg font-bold ${strengthColor}">${signalStrength}</div>
-                    </div>
-                    <div>
-                        <div class="text-sm text-gray-400">Pass Rate</div>
-                        <div class="text-lg font-bold text-white">${passRate}%</div>
-                    </div>
-                    <div>
-                        <div class="text-sm text-gray-400">Passed</div>
-                        <div class="text-lg font-bold text-green-500">${passed.length}</div>
-                    </div>
-                    <div>
-                        <div class="text-sm text-gray-400">Failed</div>
-                        <div class="text-lg font-bold text-red-500">${failed.length}</div>
-                    </div>
-                </div>
-                <div class="mt-4 p-3 bg-gray-800 rounded">
-                    <div class="text-sm text-gray-400 mb-1">Analisis</div>
-                    <div class="text-sm">
-                        Sinyal ${direction} untuk ${symbol} memiliki tingkat keberhasilan indikator ${passRate}%, 
-                        menunjukkan sinyal yang ${signalStrength.toLowerCase() === 'strong' ? 'kuat' : signalStrength.toLowerCase() === 'moderate' ? 'sedang' : 'lemah'}. 
-                        ${passed.length} indikator teknikal mengkonfirmasi setup trading sementara ${failed.length} tidak memenuhi kriteria.
-                    </div>
-                </div>
-            `;
-            
-            // Add AI Reasoning sections if available
-            if (aiEntryReasoning || aiExitReasoning) {
-                summaryContainer.innerHTML += `
-                    <div class="mt-6">
-                        <h5 class="text-teal-500 font-semibold mb-3 flex items-center">
-                            <i class="fas fa-robot mr-2"></i>AI Analysis & Reasoning
-                        </h5>
-                `;
-                
-                if (aiEntryReasoning) {
-                    summaryContainer.innerHTML += `
-                        <div class="mb-4 p-4 bg-teal-500/10 rounded border border-teal-500/30">
-                            <h6 class="text-teal-400 font-semibold mb-2 flex items-center">
-                                <i class="fas fa-sign-in-alt mr-2"></i>Entry Reasoning
-                            </h6>
-                            <div class="text-sm text-gray-300 leading-relaxed">
-                                ${aiEntryReasoning.replace(/\n/g, '<br>')}
-                            </div>
-                        </div>
-                    `;
-                }
-                
-                if (aiExitReasoning) {
-                    summaryContainer.innerHTML += `
-                        <div class="p-4 bg-orange-500/10 rounded border border-orange-500/30">
-                            <h6 class="text-orange-400 font-semibold mb-2 flex items-center">
-                                <i class="fas fa-sign-out-alt mr-2"></i>Exit Reasoning
-                            </h6>
-                            <div class="text-sm text-gray-300 leading-relaxed">
-                                ${aiExitReasoning.replace(/\n/g, '<br>')}
-                            </div>
-                        </div>
-                    `;
-                }
-                
-                summaryContainer.innerHTML += `</div>`;
-            }
-            
-            // Show modal
-            document.getElementById('indicatorModal').classList.remove('hidden');
-        }
-        
         function closeIndicatorModal() {
             document.getElementById('indicatorModal').classList.add('hidden');
         }
@@ -3352,65 +3208,15 @@
             const statusIcon = document.getElementById('trading-status-icon');
             const statusText = document.getElementById('trading-status-text');
             const statusDetail = document.getElementById('trading-status-detail');
-            const startBtn = document.getElementById('start-trading-btn');
-            const stopBtn = document.getElementById('stop-trading-btn');
-            
+
             if (status.enabled) {
                 statusIcon.className = 'fas fa-circle text-green-500 sidebar-icon';
                 statusText.textContent = 'ACTIVE';
                 statusDetail.textContent = 'Trading enabled';
-                startBtn.disabled = true;
-                startBtn.classList.add('opacity-50', 'cursor-not-allowed');
-                stopBtn.disabled = false;
-                stopBtn.classList.remove('opacity-50', 'cursor-not-allowed');
             } else {
                 statusIcon.className = 'fas fa-circle text-red-500 sidebar-icon';
                 statusText.textContent = 'STOPPED';
                 statusDetail.textContent = 'Trading disabled';
-                startBtn.disabled = false;
-                startBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-                stopBtn.disabled = true;
-                stopBtn.classList.add('opacity-50', 'cursor-not-allowed');
-            }
-        }
-        
-        async function startTrading() {
-            try {
-                const response = await fetch('/api/trading/start', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
-                });
-                
-                const data = await response.json();
-                
-                if (data.success) {
-                    showNotification('✅ Trading Started', 'Bot will resume taking new positions', 'success');
-                    loadTradingStatus();
-                } else {
-                    showNotification('❌ Error', data.error || 'Failed to start trading', 'error');
-                }
-            } catch (error) {
-                showNotification('❌ Error', 'Failed to start trading', 'error');
-            }
-        }
-        
-        async function stopTrading() {
-            try {
-                const response = await fetch('/api/trading/stop', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
-                });
-                
-                const data = await response.json();
-                
-                if (data.success) {
-                    showNotification('🛑 Trading Stopped', 'No new positions. Existing positions monitored.', 'warning');
-                    loadTradingStatus();
-                } else {
-                    showNotification('❌ Error', data.error || 'Failed to stop trading', 'error');
-                }
-            } catch (error) {
-                showNotification('❌ Error', 'Failed to stop trading', 'error');
             }
         }
         

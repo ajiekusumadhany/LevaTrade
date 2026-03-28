@@ -3,7 +3,13 @@ Dry Run Trading System - Simulasi trading dengan tracking lengkap
 """
 import json
 import sqlite3
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+
+# WIB = UTC+7
+WIB = timezone(timedelta(hours=7))
+
+def now_wib() -> datetime:
+    return datetime.now(WIB)
 import uuid
 from typing import Dict, List, Optional
 import asyncio
@@ -93,7 +99,8 @@ class DryRunSystem:
                 market_cap_category TEXT DEFAULT '',
                 volume_category TEXT DEFAULT '',
                 market_data_timestamp TEXT DEFAULT '',
-                trading_session TEXT DEFAULT 'UNKNOWN'
+                trading_session TEXT DEFAULT 'UNKNOWN',
+                strategy_name TEXT DEFAULT 'ICT_SMC'
             )
         ''')
         
@@ -139,7 +146,8 @@ class DryRunSystem:
                 market_cap_category TEXT DEFAULT '',
                 volume_category TEXT DEFAULT '',
                 market_data_timestamp TEXT DEFAULT '',
-                trading_session TEXT DEFAULT 'UNKNOWN'
+                trading_session TEXT DEFAULT 'UNKNOWN',
+                strategy_name TEXT DEFAULT 'ICT_SMC'
             )
         ''')
         
@@ -162,7 +170,22 @@ class DryRunSystem:
         
         conn.commit()
         conn.close()
-    
+
+        # Migration: tambah kolom strategy_name jika belum ada (untuk DB lama)
+        self._migrate_add_strategy_column()
+
+    def _migrate_add_strategy_column(self):
+        """Add strategy_name column to existing databases"""
+        conn = sqlite3.connect(self.db_path, timeout=30.0)
+        cursor = conn.cursor()
+        for table in ('open_positions', 'trade_history'):
+            try:
+                cursor.execute(f"ALTER TABLE {table} ADD COLUMN strategy_name TEXT DEFAULT 'ICT_SMC'")
+            except Exception:
+                pass  # Column already exists
+        conn.commit()
+        conn.close()
+
     async def open_position(self, signal: Dict) -> str:
         """Open new position"""
         position_id = str(uuid.uuid4())
@@ -209,7 +232,7 @@ class DryRunSystem:
                     market_data = await market_system.get_market_data(signal['symbol'])
                     
                     # Get trading session for current time
-                    current_time = datetime.now().isoformat()
+                    current_time = now_wib().isoformat()
                     trading_session = session_analyzer.get_trading_session(current_time)
                     
                 except Exception as e:
@@ -224,12 +247,12 @@ class DryRunSystem:
                      market_cap, market_cap_rank, total_volume_24h, circulating_supply, total_supply, max_supply,
                      price_change_24h, price_change_percentage_24h, price_change_percentage_7d, price_change_percentage_30d,
                      ath, ath_change_percentage, atl, atl_change_percentage, bybit_volume_24h, bybit_turnover_24h,
-                     liquidity_score, volatility_score, market_dominance, market_cap_category, volume_category, market_data_timestamp, trading_session)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     liquidity_score, volatility_score, market_dominance, market_cap_category, volume_category, market_data_timestamp, trading_session, strategy_name)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     position_id, signal['symbol'], signal['direction'], signal['close'],
                     signal['pos_size'], signal['leverage'], signal['tp'], signal['sl'],
-                    datetime.now().isoformat(), signal['close'], 0.0, json.dumps(indicators),
+                    now_wib().isoformat(), signal['close'], 0.0, json.dumps(indicators),
                     signal['position_value_usd'], signal.get('ai_entry_reasoning', ''),
                     # Market data
                     market_data.get('market_cap', 0),
@@ -254,7 +277,8 @@ class DryRunSystem:
                     market_system.categorize_market_cap(market_data.get('market_cap', 0)) if market_data else "",
                     market_system.categorize_volume(market_data.get('total_volume_24h', 0)) if market_data else "",
                     market_data.get('timestamp', ''),
-                    trading_session
+                    trading_session,
+                    signal.get('strategy', 'ICT_SMC')
                 ))
         
                 conn.commit()
@@ -273,6 +297,8 @@ class DryRunSystem:
                         'sl_price': signal['sl'],
                         'leverage': signal['leverage'],
                         'position_value_usd': signal['position_value_usd'],
+                        'strategy_name': signal.get('strategy', 'ICT_SMC'),
+                        'strategy_label': signal.get('strategy_label', '📐 ICT/SMC'),
                         'mode': 'dry-run'
                     })
                 except Exception as e:
@@ -294,53 +320,35 @@ class DryRunSystem:
     
     async def update_positions(self, current_prices: Dict[str, float]):
         """Update current prices and check for TP/SL hits"""
-        # Retry mechanism for database operations
         max_retries = 3
         for attempt in range(max_retries):
             try:
                 conn = sqlite3.connect(self.db_path, timeout=30.0)
+                conn.row_factory = sqlite3.Row
                 cursor = conn.cursor()
         
-                # Get all open positions
                 cursor.execute('SELECT * FROM open_positions')
                 positions = cursor.fetchall()
                 
                 for pos in positions:
-                    # Handle different database schemas (old vs new with market data)
-                    if len(pos) >= 36:  # New schema with market data (37 total columns)
-                        # Extract only the essential columns we need for position updates
-                        pos_id = pos[0]
-                        symbol = pos[1] 
-                        direction = pos[2]
-                        entry_price = pos[3]
-                        quantity = pos[4]
-                        leverage = pos[5]
-                        tp_price = pos[6]
-                        sl_price = pos[7]
-                        entry_time = pos[8]
-                        current_price_db = pos[9]
-                        unrealized_pnl = pos[10]
-                        indicators = pos[11]
-                        position_value_usd = pos[12]
-                        ai_entry_reasoning = pos[13] if len(pos) > 13 else ""
-                    elif len(pos) >= 14:  # Old schema with AI reasoning but no market data
-                        (pos_id, symbol, direction, entry_price, quantity, leverage, 
-                         tp_price, sl_price, entry_time, current_price_db, unrealized_pnl, indicators, 
-                         position_value_usd, ai_entry_reasoning) = pos
-                    else:  # Very old schema without AI reasoning and market data
-                        (pos_id, symbol, direction, entry_price, quantity, leverage, 
-                         tp_price, sl_price, entry_time, current_price_db, unrealized_pnl, indicators, position_value_usd) = pos
-                        ai_entry_reasoning = ""
-                    
+                    pos_id = pos['id']
+                    symbol = pos['symbol']
+                    direction = pos['direction']
+                    entry_price = pos['entry_price']
+                    quantity = pos['quantity']
+                    leverage = pos['leverage']
+                    tp_price = pos['tp_price']
+                    sl_price = pos['sl_price']
+                    entry_time = pos['entry_time']
+                    ai_entry_reasoning = pos['ai_entry_reasoning'] if 'ai_entry_reasoning' in pos.keys() else ''
+
                     if symbol in current_prices:
                         current_price = current_prices[symbol]
                         
-                        # Null check untuk mencegah NoneType error
                         if not all([current_price, entry_price, quantity, tp_price, sl_price]):
-                            print(f"⚠️  Skipping {symbol}: Missing data - current_price={current_price}, entry_price={entry_price}, quantity={quantity}, tp_price={tp_price}, sl_price={sl_price}")
+                            print(f"⚠️  Skipping {symbol}: Missing data")
                             continue
                         
-                        # Additional type check with detailed error info
                         try:
                             current_price = float(current_price)
                             entry_price = float(entry_price)
@@ -349,46 +357,33 @@ class DryRunSystem:
                             sl_price = float(sl_price)
                         except (TypeError, ValueError) as e:
                             print(f"⚠️  Skipping {symbol}: Invalid data types - {e}")
-                            print(f"    Raw values: current_price={repr(current_price)}, entry_price={repr(entry_price)}, quantity={repr(quantity)}")
                             continue
                         
-                        # Debug print for problematic calculations
-                        print(f"🔍 Updating {symbol}: current=${current_price:.6f}, entry=${entry_price:.6f}, qty={quantity:.3f}")
-                        
-                        # Calculate unrealized PnL with error handling
                         try:
                             if direction == "LONG":
                                 pnl = (current_price - entry_price) * quantity
-                                # Check TP/SL
                                 if current_price >= tp_price:
-                                    # Generate AI exit reasoning for TP hit
                                     ai_exit_reasoning = await self._generate_exit_reasoning(pos, current_price, "TP_HIT")
                                     self._close_position(pos_id, current_price, "TP_HIT", conn, ai_exit_reasoning)
                                     continue
                                 elif current_price <= sl_price:
-                                    # Generate AI exit reasoning for SL hit
                                     ai_exit_reasoning = await self._generate_exit_reasoning(pos, current_price, "SL_HIT")
                                     self._close_position(pos_id, current_price, "SL_HIT", conn, ai_exit_reasoning)
                                     continue
                             else:  # SHORT
                                 pnl = (entry_price - current_price) * quantity
-                                # Check TP/SL
                                 if current_price <= tp_price:
-                                    # Generate AI exit reasoning for TP hit
                                     ai_exit_reasoning = await self._generate_exit_reasoning(pos, current_price, "TP_HIT")
                                     self._close_position(pos_id, current_price, "TP_HIT", conn, ai_exit_reasoning)
                                     continue
                                 elif current_price >= sl_price:
-                                    # Generate AI exit reasoning for SL hit
                                     ai_exit_reasoning = await self._generate_exit_reasoning(pos, current_price, "SL_HIT")
                                     self._close_position(pos_id, current_price, "SL_HIT", conn, ai_exit_reasoning)
                                     continue
                         except Exception as calc_error:
                             print(f"❌ Error calculating PnL for {symbol}: {calc_error}")
-                            print(f"   Values: direction={direction}, current_price={current_price}, entry_price={entry_price}, quantity={quantity}")
                             continue
                         
-                        # Update current price and unrealized PnL
                         cursor.execute('''
                             UPDATE open_positions 
                             SET current_price = ?, unrealized_pnl = ?
@@ -397,15 +392,13 @@ class DryRunSystem:
                 
                 conn.commit()
                 conn.close()
-                break  # Success, exit retry loop
+                break
                 
             except sqlite3.OperationalError as e:
                 if "database is locked" in str(e) and attempt < max_retries - 1:
-                    print(f"⚠️  Database locked during position update, retrying... ({attempt + 1}/{max_retries})")
-                    await asyncio.sleep(0.1 * (attempt + 1))  # Exponential backoff
+                    await asyncio.sleep(0.1 * (attempt + 1))
                     continue
                 else:
-                    print(f"❌ Database error during position update after {attempt + 1} attempts: {e}")
                     raise
             except Exception as e:
                 print(f"❌ Unexpected error updating positions: {e}")
@@ -489,9 +482,20 @@ class DryRunSystem:
             
             # Calculate duration
             entry_dt = datetime.fromisoformat(entry_time)
-            exit_dt = datetime.now()
+            exit_dt = now_wib()
+            # Handle naive entry_dt (lama tanpa timezone)
+            if entry_dt.tzinfo is None:
+                entry_dt = entry_dt.replace(tzinfo=WIB)
             duration_minutes = int((exit_dt - entry_dt).total_seconds() / 60)
             
+            # Get strategy_name from open position (column index 37 if exists)
+            strategy_name = 'ICT_SMC'
+            try:
+                if len(pos) >= 39:
+                    strategy_name = pos[38] or 'ICT_SMC'
+            except Exception:
+                pass
+
             # Move to history
             cursor.execute('''
                 INSERT INTO trade_history 
@@ -501,8 +505,8 @@ class DryRunSystem:
                  market_cap, market_cap_rank, total_volume_24h, circulating_supply, total_supply, max_supply,
                  price_change_24h, price_change_percentage_24h, price_change_percentage_7d, price_change_percentage_30d,
                  ath, ath_change_percentage, atl, atl_change_percentage, bybit_volume_24h, bybit_turnover_24h,
-                 liquidity_score, volatility_score, market_dominance, market_cap_category, volume_category, market_data_timestamp, trading_session)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 liquidity_score, volatility_score, market_dominance, market_cap_category, volume_category, market_data_timestamp, trading_session, strategy_name)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 pos_id, symbol, direction, entry_price, exit_price, quantity, leverage,
                 entry_time, exit_dt.isoformat(), exit_reason, pnl, pnl_percentage,
@@ -513,7 +517,7 @@ class DryRunSystem:
                 price_change_24h, price_change_percentage_24h, price_change_percentage_7d, price_change_percentage_30d,
                 ath, ath_change_percentage, atl, atl_change_percentage, bybit_volume_24h, bybit_turnover_24h,
                 liquidity_score, volatility_score, market_dominance, market_cap_category, volume_category, market_data_timestamp,
-                trading_session
+                trading_session, strategy_name
             ))
             
             # Remove from open positions
@@ -565,6 +569,7 @@ class DryRunSystem:
                     'pnl': pnl,
                     'pnl_percentage': pnl_percentage,
                     'duration_minutes': duration_minutes,
+                    'strategy_name': strategy_name,
                     'mode': 'dry-run'
                 })
             except Exception as e:
@@ -626,7 +631,7 @@ class DryRunSystem:
                 'entry_time': pos[8],  # entry_time
                 'realized_pnl': realized_pnl,
                 'pnl_percentage': pnl_percentage,
-                'entry_indicators': json.loads(pos[11]) if pos[11] else {},  # indicators
+                'entry_indicators': json.loads(pos[11]) if pos[11] and str(pos[11]).strip() else {},  # indicators
                 
                 # CRITICAL: Add all market data that was stored at entry
                 'market_cap': pos[14] if len(pos) > 14 else 0,
@@ -734,6 +739,7 @@ Meskipun analisis AI tidak tersedia, trade ini tetap mengikuti protokol risk man
     def get_open_positions(self) -> List[Dict]:
         """Get all open positions ordered by newest first"""
         conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         
         cursor.execute('SELECT * FROM open_positions ORDER BY entry_time DESC')
@@ -741,71 +747,29 @@ Meskipun analisis AI tidak tersedia, trade ini tetap mengikuti protokol risk man
         
         result = []
         for pos in positions:
-            # Handle different database schemas (old vs new with market data and trading session)
-            if len(pos) >= 37:  # New schema with market data and trading session
-                (pos_id, symbol, direction, entry_price, quantity, leverage, 
-                 tp_price, sl_price, entry_time, current_price, unrealized_pnl, 
-                 indicators, position_value_usd, ai_entry_reasoning) = pos[:14]  # Take only first 14 columns
-                # Extract market data and trading session
-                market_data_cols = pos[14:36]  # Columns 14-35 are market data
-                trading_session = pos[36] if len(pos) > 36 else 'UNKNOWN'
-            elif len(pos) >= 36:  # New schema with market data but no trading session
-                (pos_id, symbol, direction, entry_price, quantity, leverage, 
-                 tp_price, sl_price, entry_time, current_price, unrealized_pnl, 
-                 indicators, position_value_usd, ai_entry_reasoning) = pos[:14]  # Take only first 14 columns
-                # Extract market data
-                market_data_cols = pos[14:36]  # Columns 14-35 are market data
-                # Get trading session from entry time
-                try:
-                    from trading_session_system import get_session_analyzer
-                    session_analyzer = get_session_analyzer()
-                    trading_session = session_analyzer.get_trading_session(entry_time)
-                except:
-                    trading_session = 'UNKNOWN'
-            elif len(pos) >= 14:  # Old schema with AI reasoning but no market data
-                (pos_id, symbol, direction, entry_price, quantity, leverage, 
-                 tp_price, sl_price, entry_time, current_price, unrealized_pnl, 
-                 indicators, position_value_usd, ai_entry_reasoning) = pos
-                # Set default market data
-                market_data_cols = [0] * 22
-                # Get trading session from entry time
-                try:
-                    from trading_session_system import get_session_analyzer
-                    session_analyzer = get_session_analyzer()
-                    trading_session = session_analyzer.get_trading_session(entry_time)
-                except:
-                    trading_session = 'UNKNOWN'
-            else:  # Very old schema without AI reasoning and market data
-                (pos_id, symbol, direction, entry_price, quantity, leverage, 
-                 tp_price, sl_price, entry_time, current_price, unrealized_pnl, 
-                 indicators, position_value_usd) = pos
-                ai_entry_reasoning = ""
-                # Set default market data
-                market_data_cols = [0] * 22
-                # Get trading session from entry time
-                try:
-                    from trading_session_system import get_session_analyzer
-                    session_analyzer = get_session_analyzer()
-                    trading_session = session_analyzer.get_trading_session(entry_time)
-                except:
-                    trading_session = 'UNKNOWN'
-            
+            indicators_raw = pos['indicators'] if 'indicators' in pos.keys() else ''
+            try:
+                indicators_parsed = json.loads(indicators_raw) if indicators_raw and str(indicators_raw).strip() else {}
+            except (json.JSONDecodeError, TypeError):
+                indicators_parsed = {}
+
             result.append({
-                'id': pos_id,
-                'symbol': symbol,
-                'direction': direction,
-                'entry_price': entry_price,
-                'current_price': current_price or entry_price,
-                'quantity': quantity,
-                'leverage': leverage,
-                'tp_price': tp_price,
-                'sl_price': sl_price,
-                'entry_time': entry_time,
-                'unrealized_pnl': unrealized_pnl or 0,
-                'indicators': json.loads(indicators) if indicators else {},
-                'position_value_usd': position_value_usd,
-                'ai_entry_reasoning': ai_entry_reasoning,
-                'trading_session': trading_session
+                'id': pos['id'],
+                'symbol': pos['symbol'],
+                'direction': pos['direction'],
+                'entry_price': pos['entry_price'],
+                'current_price': pos['current_price'] or pos['entry_price'],
+                'quantity': pos['quantity'],
+                'leverage': pos['leverage'],
+                'tp_price': pos['tp_price'],
+                'sl_price': pos['sl_price'],
+                'entry_time': pos['entry_time'],
+                'unrealized_pnl': pos['unrealized_pnl'] or 0,
+                'indicators': indicators_parsed,
+                'position_value_usd': pos['position_value_usd'],
+                'ai_entry_reasoning': pos['ai_entry_reasoning'] if 'ai_entry_reasoning' in pos.keys() else '',
+                'trading_session': pos['trading_session'] if 'trading_session' in pos.keys() else 'UNKNOWN',
+                'strategy_name': pos['strategy_name'] if 'strategy_name' in pos.keys() else 'ICT_SMC',
             })
         
         conn.close()
@@ -885,6 +849,14 @@ Meskipun analisis AI tidak tersedia, trade ini tetap mengikuti protokol risk man
                 except:
                     trading_session = 'UNKNOWN'
             
+            # Extract strategy_name — column index 40 in new schema (after trading_session at 39)
+            strategy_name = 'ICT_SMC'
+            try:
+                if len(trade) >= 41:
+                    strategy_name = trade[40] or 'ICT_SMC'
+            except Exception:
+                pass
+
             result.append({
                 'id': trade_id,
                 'symbol': symbol,
@@ -898,12 +870,7 @@ Meskipun analisis AI tidak tersedia, trade ini tetap mengikuti protokol risk man
                 'exit_reason': exit_reason,
                 'pnl': pnl,
                 'pnl_percentage': pnl_percentage,
-                'indicators': json.loads(indicators) if indicators else {},
-                'position_value_usd': position_value_usd,
-                'duration_minutes': duration_minutes,
-                'ai_entry_reasoning': ai_entry_reasoning,
-                'ai_exit_reasoning': ai_exit_reasoning,
-                'trading_session': trading_session,
+                'indicators': json.loads(indicators) if indicators and indicators.strip() else {},
                 # Market data
                 'market_cap': market_cap,
                 'market_cap_rank': market_cap_rank,
@@ -912,7 +879,13 @@ Meskipun analisis AI tidak tersedia, trade ini tetap mengikuti protokol risk man
                 'volatility_score': volatility_score,
                 'market_dominance': market_dominance,
                 'market_cap_category': market_cap_category,
-                'volume_category': volume_category
+                'volume_category': volume_category,
+                'trading_session': trading_session,
+                'strategy_name': strategy_name,
+                'ai_entry_reasoning': ai_entry_reasoning or '',
+                'ai_exit_reasoning': ai_exit_reasoning or '',
+                'position_value_usd': position_value_usd,
+                'duration_minutes': duration_minutes,
             })
         
         conn.close()
@@ -952,7 +925,7 @@ Meskipun analisis AI tidak tersedia, trade ini tetap mengikuti protokol risk man
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
-        cursor.execute('SELECT * FROM performance_metrics ORDER BY date DESC LIMIT 1')
+        cursor.execute('SELECT date, total_trades, winning_trades, losing_trades, total_pnl, win_rate, profit_factor, max_drawdown, balance FROM performance_metrics ORDER BY date DESC LIMIT 1')
         metrics = cursor.fetchone()
         
         # Get current dynamic balance
@@ -960,13 +933,15 @@ Meskipun analisis AI tidak tersedia, trade ini tetap mengikuti protokol risk man
         
         if metrics:
             (date, total_trades, winning_trades, losing_trades, total_pnl,
-             max_drawdown, balance, win_rate, avg_win, avg_loss, profit_factor) = metrics
+             win_rate, profit_factor, max_drawdown, balance) = metrics
+            avg_win = 0
+            avg_loss = 0
             
             # Calculate ROI Account = Total PnL / Starting Balance
             import os
             from dotenv import load_dotenv
             load_dotenv()
-            starting_balance = float(os.getenv('BALANCE_USD', '1167'))
+            starting_balance = float(os.getenv('BALANCE_USD', '1000'))
             roi_account = (total_pnl / starting_balance) * 100 if starting_balance > 0 else 0
             
             result = {
@@ -975,30 +950,34 @@ Meskipun analisis AI tidak tersedia, trade ini tetap mengikuti protokol risk man
                 'winning_trades': winning_trades,
                 'losing_trades': losing_trades,
                 'total_pnl': total_pnl,
-                'roi_account': roi_account,  # ROI Account untuk evaluasi performa
+                'roi_account': roi_account,
                 'max_drawdown': max_drawdown,
-                'balance': current_balance,  # Use dynamic balance
+                'balance': current_balance,
                 'win_rate': win_rate,
                 'avg_win': avg_win,
                 'avg_loss': avg_loss,
                 'profit_factor': profit_factor,
-                'starting_balance': BALANCE_USD
+                'starting_balance': starting_balance
             }
         else:
+            import os
+            from dotenv import load_dotenv
+            load_dotenv()
+            starting_balance = float(os.getenv('BALANCE_USD', '1000'))
             result = {
                 'date': datetime.now().date().isoformat(),
                 'total_trades': 0,
                 'winning_trades': 0,
                 'losing_trades': 0,
                 'total_pnl': 0,
-                'roi_account': 0,  # ROI Account untuk evaluasi performa
+                'roi_account': 0,
                 'max_drawdown': 0,
-                'balance': current_balance,  # Use dynamic balance
+                'balance': current_balance,
                 'win_rate': 0,
                 'avg_win': 0,
                 'avg_loss': 0,
                 'profit_factor': 0,
-                'starting_balance': BALANCE_USD
+                'starting_balance': starting_balance
             }
         
         conn.close()

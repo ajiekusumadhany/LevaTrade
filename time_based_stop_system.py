@@ -4,18 +4,25 @@ Menutup posisi berdasarkan durasi maksimum per session
 """
 
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 import asyncio
 
+# WIB = UTC+7
+WIB = timezone(timedelta(hours=7))
+
+def now_wib() -> datetime:
+    """Waktu sekarang dalam WIB (UTC+7)"""
+    return datetime.now(WIB)
+
 class TimeBasedStopSystem:
     def __init__(self):
-        # Session-based maximum duration (in minutes)
+        # Session-based maximum duration (in minutes) — swing trading
         self.session_max_duration = {
-            'DEAD_ZONE': 180,  # 3 hours
-            'ASIA': 120,       # 2 hours  
-            'LONDON': 90,      # 1.5 hours
-            'NEWYORK': 60      # 1 hour
+            'DEAD_ZONE': 14400,  # 10 hari
+            'ASIA':      10080,  # 7 hari
+            'LONDON':    10080,  # 7 hari
+            'NEWYORK':   10080   # 7 hari
         }
         
         # Track position entry times
@@ -26,6 +33,9 @@ class TimeBasedStopSystem:
         
     def register_position_entry(self, symbol: str, entry_time: datetime, session: str):
         """Register when a position was opened"""
+        # Pastikan entry_time aware WIB
+        if entry_time.tzinfo is None:
+            entry_time = entry_time.replace(tzinfo=WIB)
         self.position_entry_times[symbol] = {
             'entry_time': entry_time,
             'session': session,
@@ -36,7 +46,7 @@ class TimeBasedStopSystem:
     
     def check_time_based_exits(self, open_positions: List[Dict]) -> List[Dict]:
         """Check which positions should be closed due to time limits"""
-        current_time = datetime.now()
+        current_time = now_wib()
         positions_to_close = []
         
         for position in open_positions:
@@ -116,9 +126,11 @@ class TimeBasedStopSystem:
         entry_info = self.position_entry_times.get(symbol)
         if not entry_info:
             return None
-            
-        current_time = datetime.now()
-        duration_minutes = (current_time - entry_info['entry_time']).total_seconds() / 60
+        current_time = now_wib()
+        entry_time = entry_info['entry_time']
+        if entry_time.tzinfo is None:
+            entry_time = entry_time.replace(tzinfo=WIB)
+        duration_minutes = (current_time - entry_time).total_seconds() / 60
         return duration_minutes
     
     def get_time_remaining(self, symbol: str) -> Optional[float]:
@@ -165,20 +177,17 @@ class TimeBasedStopSystem:
             pnl_emoji = "💰" if unrealized_pnl >= 0 else "💸"
             direction_emoji = "📈" if direction == "LONG" else "📉"
             
-            message = f"""⏰🚪 TIME STOP EXECUTED
-{direction_emoji} {symbol} {direction}
+            message = f"""⏰ TIME STOP
+⏱️ {symbol} {direction} — {session}
+━━━━━━━━━━━━━━━━━━━━━━
 
-⏱️ Duration: {duration:.1f} minutes
-🚫 Max Allowed: {max_duration} minutes ({session} session)
-📊 Entry Price: ${entry_price:.6f}
-💰 Exit Price: ${current_price:.6f}
+{direction_emoji} Durasi: {duration:.0f}m / {max_duration}m
+💰 Entry: ${entry_price:.6f}
+🎯 Exit:  ${current_price:.6f}
 {pnl_emoji} PnL: ${unrealized_pnl:.2f}
 
-🎯 Reason: Maximum time limit reached
-📅 Session: {session}
-
-⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-🚀 Powered by LevaTrade"""
+⏰ {now_wib().strftime('%d %b %Y  %H:%M:%S')} WIB
+<i>LevaTrade · ICT/SMC Engine</i>"""
             
             bot = Bot(token=TELEGRAM_BOT_TOKEN)
             await bot.send_message(

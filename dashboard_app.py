@@ -225,7 +225,8 @@ def get_trade_details(trade_id):
             'position_value_usd': position_value_usd,
             'duration_minutes': duration_minutes,
             'ai_entry_reasoning': ai_entry_reasoning or '',
-            'ai_exit_reasoning': ai_exit_reasoning or ''
+            'ai_exit_reasoning': ai_exit_reasoning or '',
+            'strategy_name': trade_data[40] if len(trade_data) >= 41 else 'ICT_SMC',
         }
         
         conn.close()
@@ -237,8 +238,13 @@ def get_trade_details(trade_id):
 @app.route('/api/history')
 def get_history():
     """API endpoint untuk trade history dengan pagination"""
-    limit = int(request.args.get('limit', 10))  # Default 10 per page
-    offset = int(request.args.get('offset', 0))  # Starting position
+    limit_raw = request.args.get('limit', 10)
+    offset_raw = request.args.get('offset', 0)
+    try:
+        limit = int(float(limit_raw)) if limit_raw not in ('NaN', 'null', '', None) else 10
+        offset = int(float(offset_raw)) if offset_raw not in ('NaN', 'null', '', None) else 0
+    except (ValueError, TypeError):
+        limit, offset = 10, 0
     mode = request.args.get('mode', 'dry-run')
     
     if mode == 'dry-run':
@@ -404,6 +410,95 @@ def get_best_worst_sessions():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
+@app.route('/api/strategy-performance')
+def get_strategy_performance():
+    """API endpoint untuk strategy performance statistics"""
+    mode = request.args.get('mode', 'dry-run').replace('-', '_')
+    days = int(request.args.get('days', 30))
+
+    try:
+        import sqlite3
+        from datetime import datetime, timedelta
+
+        db_path = 'dry_run_trades.db' if mode == 'dry_run' else 'real_trades.db'
+        conn = sqlite3.connect(db_path, timeout=10)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        since = (datetime.now() - timedelta(days=days)).isoformat()
+
+        cursor.execute('''
+            SELECT
+                COALESCE(strategy_name, 'ICT_SMC') as strategy,
+                COUNT(*) as total_trades,
+                SUM(CASE WHEN pnl > 0 THEN 1 ELSE 0 END) as wins,
+                SUM(CASE WHEN pnl <= 0 THEN 1 ELSE 0 END) as losses,
+                SUM(pnl) as total_pnl,
+                AVG(pnl) as avg_pnl,
+                AVG(CASE WHEN pnl > 0 THEN pnl END) as avg_win,
+                AVG(CASE WHEN pnl <= 0 THEN pnl END) as avg_loss,
+                MAX(pnl) as best_trade,
+                MIN(pnl) as worst_trade,
+                AVG(duration_minutes) as avg_duration_min
+            FROM trade_history
+            WHERE exit_time >= ?
+            GROUP BY COALESCE(strategy_name, 'ICT_SMC')
+            ORDER BY total_pnl DESC
+        ''', (since,))
+
+        rows = cursor.fetchall()
+        conn.close()
+
+        STRATEGY_LABELS = {
+            'ICT_SMC':       '📐 ICT/SMC',
+            'MEAN_REVERSION':'📊 Mean Reversion',
+            'TREND_FOLLOW':  '📈 Trend Following',
+            'FUNDING_RATE':  '💰 Funding Rate',
+            'ORDERFLOW':     '🌊 Orderflow/CVD',
+        }
+
+        strategies = []
+        for row in rows:
+            strat = row['strategy']
+            total = row['total_trades']
+            wins = row['wins'] or 0
+            win_rate = (wins / total * 100) if total > 0 else 0
+            avg_loss = row['avg_loss'] or -1
+            profit_factor = abs((wins * (row['avg_win'] or 0)) / ((total - wins) * abs(avg_loss))) if (total - wins) > 0 and avg_loss != 0 else 0
+
+            strategies.append({
+                'strategy': strat,
+                'label': STRATEGY_LABELS.get(strat, strat),
+                'total_trades': total,
+                'wins': wins,
+                'losses': row['losses'] or 0,
+                'win_rate': round(win_rate, 1),
+                'total_pnl': round(row['total_pnl'] or 0, 2),
+                'avg_pnl': round(row['avg_pnl'] or 0, 2),
+                'avg_win': round(row['avg_win'] or 0, 2),
+                'avg_loss': round(avg_loss, 2),
+                'best_trade': round(row['best_trade'] or 0, 2),
+                'worst_trade': round(row['worst_trade'] or 0, 2),
+                'profit_factor': round(profit_factor, 2),
+                'avg_duration_min': round(row['avg_duration_min'] or 0, 0),
+            })
+
+        # Best strategy by win rate (min 5 trades)
+        qualified = [s for s in strategies if s['total_trades'] >= 5]
+        best_by_winrate = max(qualified, key=lambda x: x['win_rate']) if qualified else None
+        best_by_pnl = max(qualified, key=lambda x: x['total_pnl']) if qualified else None
+
+        return jsonify({
+            'success': True,
+            'days': days,
+            'strategies': strategies,
+            'best_by_winrate': best_by_winrate,
+            'best_by_pnl': best_by_pnl,
+        })
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
 @app.route('/api/indicator-performance')
 def get_indicator_performance():
     """API endpoint untuk overall indicator performance analysis"""
@@ -553,9 +648,30 @@ def get_chart_data():
 def handle_connect():
     """Handle client connection"""
     print('Client connected')
-    # Send initial data
-    emit('positions_update', dry_run_system.get_open_positions())
-    emit('performance_update', dry_run_system.get_performance_metrics())
+    # Send initial data with margin info
+    dry_positions = dry_run_system.get_open_positions()
+    for pos in dry_positions:
+        if pos.get('unrealized_pnl') is not None and pos.get('position_value_usd') and pos.get('leverage'):
+            margin_used = pos['position_value_usd'] / pos['leverage']
+            pos['pnl_percentage'] = (pos['unrealized_pnl'] / margin_used) * 100 if margin_used > 0 else 0
+        else:
+            pos['pnl_percentage'] = 0.0
+
+    dry_metrics = dry_run_system.get_performance_metrics()
+    dry_total_margin_used = sum(
+        pos['position_value_usd'] / pos['leverage']
+        for pos in dry_positions
+        if pos.get('position_value_usd') and pos.get('leverage')
+    )
+    dry_current_balance = dry_run_system.get_current_balance()
+    dry_metrics['unrealized_pnl'] = sum(pos.get('unrealized_pnl', 0) for pos in dry_positions)
+    dry_metrics['open_positions_count'] = len(dry_positions)
+    dry_metrics['total_margin_used'] = dry_total_margin_used
+    dry_metrics['available_margin'] = dry_current_balance - dry_total_margin_used
+    dry_metrics['margin_usage_percent'] = (dry_total_margin_used / dry_current_balance * 100) if dry_current_balance > 0 else 0
+
+    emit('positions_update', {'mode': 'dry-run', 'data': dry_positions})
+    emit('performance_update', {'mode': 'dry-run', 'data': dry_metrics})
 
 @socketio.on('disconnect')
 def handle_disconnect():
@@ -646,10 +762,10 @@ def broadcast_updates():
             
             print(f"📊 Dashboard updated at {datetime.now().strftime('%H:%M:%S')} - Dry: {len(dry_positions)} positions, Real: {len(real_positions)} positions")
             
-            time.sleep(30)  # Update setiap 30 detik untuk sinkron dengan position updates
+            time.sleep(2)  # Update setiap 2 detik
         except Exception as e:
             print(f"Error in broadcast_updates: {e}")
-            time.sleep(30)
+            time.sleep(2)
 
 # Start background thread for real-time updates
 def start_background_thread():
@@ -659,4 +775,4 @@ def start_background_thread():
 
 if __name__ == '__main__':
     start_background_thread()
-    socketio.run(app, host='0.0.0.0', port=5000, debug=True)
+    socketio.run(app, host='0.0.0.0', port=5000, debug=True, allow_unsafe_werkzeug=True)

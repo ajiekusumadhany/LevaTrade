@@ -18,19 +18,19 @@ telegram_bot = Bot(token=TELEGRAM_BOT_TOKEN) if TELEGRAM_BOT_TOKEN else None
 class EarlyExitSystem:
     def __init__(self):
         self.exit_rules = {
-            # Partial TP rules
-            'partial_tp_1': {'percentage': 25, 'profit_atr': 0.3},  # 25% close di 0.3x ATR
-            'partial_tp_2': {'percentage': 50, 'profit_atr': 0.6},  # 50% close di 0.6x ATR
-            
-            # Time-based exit
-            'max_duration_minutes': 120,  # 2 jam max untuk scalping
-            
+            # Partial TP rules — swing trading
+            'partial_tp_1': {'percentage': 33, 'profit_atr': 1.0},   # 33% close di 1x ATR
+            'partial_tp_2': {'percentage': 50, 'profit_atr': 2.0},   # 50% close di 2x ATR
+
+            # Time-based exit — swing trading max 7 hari
+            'max_duration_minutes': 10080,  # 7 hari
+
             # Momentum exit
             'momentum_exit_enabled': True,
-            
+
             # Trailing stop
             'trailing_stop_enabled': True,
-            'trailing_distance_atr': 0.2,  # 0.2x ATR trailing distance
+            'trailing_distance_atr': 0.5,  # 0.5x ATR untuk swing
         }
     
     def check_early_exit(self, position: Dict, current_price: float, 

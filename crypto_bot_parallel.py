@@ -1,7 +1,7 @@
 import os
 import time
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from pybit.unified_trading import HTTP
 import pandas as pd
 import numpy as np
@@ -15,11 +15,13 @@ from dry_run_system import dry_run_system
 from early_exit_system import early_exit_system
 from error_notification_system import error_notifier, notify_insufficient_balance, notify_order_rejected
 from gemini_ai_system import get_gemini_analyst
+from openclaw_ai_system import consult_gate
 from progressive_risk_system import progressive_risk_system
 from hard_stop_system import hard_stop_system
 from trading_control_system import is_trading_enabled
 from session_management_system import get_current_session_parameters, get_session_status
 from time_based_stop_system import register_position_entry, check_time_based_exits, remove_position_tracking
+from ict_smc_strategy import calculate_ict_indicators, analyze_ict_signal
 
 # Load environment variables
 load_dotenv()
@@ -123,6 +125,10 @@ BYBIT_API_KEY = os.getenv('BYBIT_API_KEY', '')
 BYBIT_API_SECRET = os.getenv('BYBIT_API_SECRET', '')
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID', '')
+TELEGRAM_CHANNEL_ID = os.getenv('TELEGRAM_CHANNEL_ID', '')
+
+# Semua target penerima notif (bot personal + channel)
+TELEGRAM_TARGETS = [t for t in [TELEGRAM_CHAT_ID, TELEGRAM_CHANNEL_ID] if t]
 
 # Trading Parameters (dari environment variables)
 BALANCE = float(os.getenv('BALANCE_USD', '1000000'))
@@ -134,74 +140,59 @@ MAX_RISK = 0.5  # Default, akan di-override oleh session parameters
 MAX_OPEN_POSITIONS = 20  # Default, akan di-override oleh session parameters
 
 # Scan Parameters
-SCAN_ALL_USDT = False  # Kembali ke top volume untuk menghindari rate limit
-TOP_VOLUME_COUNT = 100  # Top 100 pairs untuk balance antara coverage dan rate limit
+SCAN_ALL_USDT = False
+TOP_VOLUME_COUNT = 50  # Top 50 pairs - aman untuk swing trading (scan tiap 1 jam)
 
-# 🎯 MULTI-TIMEFRAME SCALPING SETUP (OPTIMAL)
-BIAS_TF = '15'      # 15m = Market bias & struktur (otak)
-ENTRY_TF = '5'      # 5m = Entry signal presisi (tangan)
-TRIGGER_TF = '1'    # 1m = Fine entry timing (pisau bedah - opsional)
-ATR_TF = '15'       # 15m = ATR stabil untuk risk calc
+# 🎯 ICT SWING SETUP — Daily/4H/1H
+BIAS_TF    = 'D'    # Daily = Market structure & bias
+ENTRY_TF   = '240'  # 4H    = OB/FVG entry zone
+TRIGGER_TF = '60'   # 1H    = Fine entry timing
+ATR_TF     = 'D'    # Daily ATR untuk risk calc
 
 # Auto Trading Settings
-AUTO_TRADE_ENABLED = True   # Enable/disable auto trading
-DRY_RUN = True             # True = simulasi saja, False = trading nyata
-MIN_POSITION_SIZE_USD = 2  # Minimal ukuran posisi dalam USD (turun untuk balance $200)
+AUTO_TRADE_ENABLED = True
+DRY_RUN = True
+MIN_POSITION_SIZE_USD = 2
 
-# Scan Interval (scalping agresif dengan multi-TF)
-SCAN_INTERVAL = 120   # 2 menit untuk scan sinyal baru (lebih cepat untuk scalping)
-POSITION_UPDATE_INTERVAL = 3  # 3 detik untuk update posisi (lebih ketat untuk scalping)
+# Scan Interval (swing — scan tiap 15 menit)
+SCAN_INTERVAL = 900   # 15 menit
+POSITION_UPDATE_INTERVAL = 2   # Update posisi tiap 2 detik (realtime)
 
-# Indicator Parameters (multi-timeframe scalping)
-# 15M BIAS INDICATORS (Struktur & Trend)
-EMA_FAST_BIAS = 8   # EMA cepat untuk bias 15m
-EMA_SLOW_BIAS = 21  # EMA lambat untuk bias 15m
-RSI_BIAS = 14       # RSI untuk bias 15m
+# RISK MANAGEMENT
+TP_ATR_MULT = 2.0
+SL_ATR_MULT = 1.0
+PIVOT_LENGTH = 3  # Lebih kecil untuk TF rendah
 
-# 5M ENTRY INDICATORS (Presisi Entry)
-EMA_FAST_ENTRY = 5   # EMA cepat untuk entry 5m
-EMA_SLOW_ENTRY = 13  # EMA lambat untuk entry 5m
-RSI_ENTRY = 9        # RSI sensitif untuk entry 5m
-
-# 1M TRIGGER INDICATORS (Fine Timing - Opsional)
-EMA_TRIGGER = 3      # EMA sangat cepat untuk trigger 1m
-RSI_TRIGGER = 7      # RSI sangat sensitif untuk trigger 1m
-
-# RISK MANAGEMENT (15M ATR - STABIL)
-TP_ATR_MULT = 1.5    # TP multiplier (lebih konservatif untuk scalping)
-SL_ATR_MULT = 0.8    # SL multiplier (tight tapi aman)
-PIVOT_LENGTH = 3     # Pivot untuk S/R detection
-
-# SESSION-SPECIFIC TIMEFRAME USAGE
+# SESSION-SPECIFIC TIMEFRAME USAGE — Swing Daily/4H/1H
 SESSION_TF_CONFIG = {
     'DEAD_ZONE': {
-        'bias_tf': '15',
-        'entry_tf': '5',
-        'use_trigger': False,  # NO 1m - likuiditas tipis
-        'atr_tf': '15'
+        'bias_tf': 'D',
+        'entry_tf': '240',
+        'use_trigger': False,
+        'atr_tf': 'D'
     },
     'ASIA': {
-        'bias_tf': '15', 
-        'entry_tf': '5',
-        'use_trigger': False,  # 5m paling stabil untuk mean reversion
-        'atr_tf': '15'
+        'bias_tf': 'D',
+        'entry_tf': '240',
+        'use_trigger': True,
+        'atr_tf': 'D'
     },
     'LONDON': {
-        'bias_tf': '15',
-        'entry_tf': '5', 
-        'use_trigger': True,   # 1m untuk pullback breakout
-        'atr_tf': '15'
+        'bias_tf': 'D',
+        'entry_tf': '240',
+        'use_trigger': True,
+        'atr_tf': 'D'
     },
     'NEWYORK': {
-        'bias_tf': '15',
-        'entry_tf': '3',       # 3m lebih aman dari 1m untuk momentum
-        'use_trigger': True,   # 1m setelah momentum confirm
-        'atr_tf': '15'
+        'bias_tf': 'D',
+        'entry_tf': '240',
+        'use_trigger': True,
+        'atr_tf': 'D'
     }
 }
 
 # Parallel Processing
-MAX_WORKERS = 100  # 1 thread per symbol untuk maksimal parallelism
+MAX_WORKERS = 10  # 10 threads, dengan 200ms delay = ~50 req/s max
 
 # ==================
 # BYBIT CLIENT
@@ -210,14 +201,16 @@ MAX_WORKERS = 100  # 1 thread per symbol untuk maksimal parallelism
 session = HTTP(
     testnet=False,  # MAINNET - data dan trading real
     api_key=BYBIT_API_KEY,
-    api_secret=BYBIT_API_SECRET
+    api_secret=BYBIT_API_SECRET,
+    domain="bytick"
 )
 
 # Trading session (MAINNET untuk real trading)
 trading_session = HTTP(
     testnet=False,   # MAINNET - untuk real trading
     api_key=BYBIT_API_KEY,
-    api_secret=BYBIT_API_SECRET
+    api_secret=BYBIT_API_SECRET,
+    domain="bytick"
 )
 
 # ==================
@@ -424,13 +417,23 @@ async def execute_trade(signal):
         if any(pos['symbol'] == symbol for pos in current_positions):
             print(f"⚠️  Already have position for {symbol}, skipping...")
             return False
-        
-        # SEMUA LIMIT DIHAPUS - Tidak ada max positions limit
-        # SEMUA LIMIT DIHAPUS - Tidak ada session limit
-        # SEMUA LIMIT DIHAPUS - Trading akan terus berjalan sampai drawdown 20%
-        
-        print(f"🚀 NO LIMITS MODE: {symbol} {direction} - All session limits removed")
-        print(f"🚀 Only 20% drawdown stop applies - Trading continues unlimited")
+
+        # MAX POSITIONS CHECK: 10 total, max 7 per direction
+        MAX_TOTAL_POSITIONS = 10
+        MAX_PER_DIRECTION   = 7
+        total_open   = len(current_positions)
+        long_count   = sum(1 for p in current_positions if p.get('direction') == 'LONG')
+        short_count  = sum(1 for p in current_positions if p.get('direction') == 'SHORT')
+
+        if total_open >= MAX_TOTAL_POSITIONS:
+            print(f"🛑 MAX POSITIONS: {total_open}/{MAX_TOTAL_POSITIONS} open — skip {symbol}")
+            return False
+        if direction == 'LONG' and long_count >= MAX_PER_DIRECTION:
+            print(f"🛑 MAX LONG: {long_count}/{MAX_PER_DIRECTION} — skip {symbol} LONG")
+            return False
+        if direction == 'SHORT' and short_count >= MAX_PER_DIRECTION:
+            print(f"🛑 MAX SHORT: {short_count}/{MAX_PER_DIRECTION} — skip {symbol} SHORT")
+            return False
         
         # Check minimum position size
         position_value_usd = signal['position_value_usd']
@@ -438,7 +441,22 @@ async def execute_trade(signal):
             print(f"⚠️  Position size too small for {symbol}: ${position_value_usd:.2f} < ${MIN_POSITION_SIZE_USD}")
             return False
         
-        # Generate AI entry reasoning before opening position
+        # ── OpenClaw pre-trade gate ───────────────────────────────────────────
+        trade_mode = 'dry_run' if DRY_RUN else 'real'
+        gate_result = await consult_gate(signal, trade_mode)
+        if not gate_result.get('approved', True):
+            print(f"🦞 [OPENCLAW GATE] REJECTED {symbol} {direction}: {gate_result.get('reason')}")
+            return False
+        else:
+            stats = gate_result.get('stats', {})
+            sym_stats = stats.get('symbol_stats', {})
+            if sym_stats.get('total', 0) > 0:
+                print(f"🦞 [OPENCLAW GATE] APPROVED {symbol} {direction} "
+                      f"(WR={sym_stats.get('win_rate')}%, {sym_stats.get('total')} trades)")
+            else:
+                print(f"🦞 [OPENCLAW GATE] APPROVED {symbol} {direction} (no history yet)")
+
+        # ── Generate AI entry reasoning ───────────────────────────────────────
         try:
             gemini_analyst = get_gemini_analyst()
             if gemini_analyst:
@@ -446,9 +464,6 @@ async def execute_trade(signal):
                 ai_entry_reasoning = await gemini_analyst.generate_entry_reasoning(signal)
                 signal['ai_entry_reasoning'] = ai_entry_reasoning
                 print(f"✅ AI entry reasoning generated for {symbol}")
-                
-                # AI reasoning akan dikirim bersamaan dengan trade alert, bukan terpisah
-                # await send_ai_entry_reasoning_telegram(symbol, direction, ai_entry_reasoning)
             else:
                 signal['ai_entry_reasoning'] = ""
                 print(f"⚠️  Gemini AI not available for {symbol}")
@@ -686,118 +701,53 @@ def get_multi_timeframe_data(symbol, session_config):
     """Ambil data multi-timeframe sesuai session config"""
     try:
         data = {}
-        
-        # 1. BIAS TIMEFRAME (15m) - Market Structure & Trend
+
+        # 1. BIAS TF (Daily) — struktur & trend utama
         bias_tf = session_config['bias_tf']
-        bias_data = get_klines(symbol, bias_tf, 100)
-        if bias_data is None or len(bias_data) < 50:
+        bias_data = get_klines(symbol, bias_tf, 200)  # 200 daily candles
+        if bias_data is None or len(bias_data) < 30:
             return None
         data['bias'] = bias_data
-        
-        # 2. ENTRY TIMEFRAME (5m/3m) - Entry Signals
+
+        # 2. ENTRY TF (4H) — OB/FVG zona entry
         entry_tf = session_config['entry_tf']
-        entry_data = get_klines(symbol, entry_tf, 100)
-        if entry_data is None or len(entry_data) < 50:
+        entry_data = get_klines(symbol, entry_tf, 200)  # 200 candles 4H = ~33 hari
+        if entry_data is None or len(entry_data) < 30:
             return None
         data['entry'] = entry_data
-        
-        # 3. TRIGGER TIMEFRAME (1m) - Fine Timing (Opsional)
+
+        # 3. TRIGGER TF (1H) — fine entry timing
         if session_config['use_trigger']:
-            trigger_data = get_klines(symbol, '1', 50)
-            if trigger_data is not None and len(trigger_data) >= 20:
-                data['trigger'] = trigger_data
-            else:
-                data['trigger'] = None
+            trigger_data = get_klines(symbol, '60', 100)
+            data['trigger'] = trigger_data if trigger_data is not None and len(trigger_data) >= 20 else None
         else:
             data['trigger'] = None
-        
-        # 4. ATR TIMEFRAME (15m) - Risk Calculation
+
+        # 4. ATR TF (Daily) — risk calculation
         atr_tf = session_config['atr_tf']
         if atr_tf != bias_tf:
             atr_data = get_klines(symbol, atr_tf, 50)
             data['atr'] = atr_data if atr_data is not None else bias_data
         else:
             data['atr'] = bias_data
-        
+
         return data
-        
+
     except Exception as e:
         print(f"❌ Error getting multi-timeframe data for {symbol}: {e}")
         return None
 
 def calculate_multi_tf_indicators(tf_data):
-    """Calculate indicators untuk setiap timeframe"""
-    try:
-        indicators = {}
-        
-        # BIAS INDICATORS (15m) - Market Structure
-        bias_df = tf_data['bias'].copy()
-        bias_df['ema_fast'] = calculate_ema(bias_df['close'], EMA_FAST_BIAS)
-        bias_df['ema_slow'] = calculate_ema(bias_df['close'], EMA_SLOW_BIAS)
-        bias_df['rsi'] = calculate_rsi(bias_df['close'], RSI_BIAS)
-        bias_df['macd_line'], bias_df['signal_line'] = calculate_macd(bias_df['close'], 12, 26, 9)
-        
-        indicators['bias'] = {
-            'ema_fast': bias_df.iloc[-1]['ema_fast'],
-            'ema_slow': bias_df.iloc[-1]['ema_slow'],
-            'rsi': bias_df.iloc[-1]['rsi'],
-            'macd_line': bias_df.iloc[-1]['macd_line'],
-            'signal_line': bias_df.iloc[-1]['signal_line'],
-            'close': bias_df.iloc[-1]['close'],
-            'trend_bullish': bias_df.iloc[-1]['ema_fast'] > bias_df.iloc[-1]['ema_slow'],
-            'macd_bullish': bias_df.iloc[-1]['macd_line'] > bias_df.iloc[-1]['signal_line']
-        }
-        
-        # ENTRY INDICATORS (5m/3m) - Entry Signals
-        entry_df = tf_data['entry'].copy()
-        entry_df['ema_fast'] = calculate_ema(entry_df['close'], EMA_FAST_ENTRY)
-        entry_df['ema_slow'] = calculate_ema(entry_df['close'], EMA_SLOW_ENTRY)
-        entry_df['rsi'] = calculate_rsi(entry_df['close'], RSI_ENTRY)
-        entry_df['macd_line'], entry_df['signal_line'] = calculate_macd(entry_df['close'], 5, 13, 4)
-        
-        indicators['entry'] = {
-            'ema_fast': entry_df.iloc[-1]['ema_fast'],
-            'ema_slow': entry_df.iloc[-1]['ema_slow'],
-            'rsi': entry_df.iloc[-1]['rsi'],
-            'macd_line': entry_df.iloc[-1]['macd_line'],
-            'signal_line': entry_df.iloc[-1]['signal_line'],
-            'close': entry_df.iloc[-1]['close'],
-            'trend_bullish': entry_df.iloc[-1]['ema_fast'] > entry_df.iloc[-1]['ema_slow'],
-            'macd_bullish': entry_df.iloc[-1]['macd_line'] > entry_df.iloc[-1]['signal_line'],
-            'volume': entry_df.iloc[-1]['volume'],
-            'volume_avg': entry_df['volume'].rolling(20).mean().iloc[-1]
-        }
-        
-        # TRIGGER INDICATORS (1m) - Fine Timing
-        if tf_data['trigger'] is not None:
-            trigger_df = tf_data['trigger'].copy()
-            trigger_df['ema'] = calculate_ema(trigger_df['close'], EMA_TRIGGER)
-            trigger_df['rsi'] = calculate_rsi(trigger_df['close'], RSI_TRIGGER)
-            
-            indicators['trigger'] = {
-                'ema': trigger_df.iloc[-1]['ema'],
-                'rsi': trigger_df.iloc[-1]['rsi'],
-                'close': trigger_df.iloc[-1]['close'],
-                'above_ema': trigger_df.iloc[-1]['close'] > trigger_df.iloc[-1]['ema'],
-                'momentum_up': trigger_df.iloc[-1]['close'] > trigger_df.iloc[-2]['close']
-            }
-        else:
-            indicators['trigger'] = None
-        
-        # ATR CALCULATION (15m) - Risk Management
-        atr_df = tf_data['atr'].copy()
-        atr_df['atr'] = calculate_atr(atr_df, 14)
-        indicators['atr_value'] = atr_df.iloc[-1]['atr']
-        
-        return indicators
-        
-    except Exception as e:
-        print(f"❌ Error calculating multi-TF indicators: {e}")
-        return None
+    """
+    Calculate ICT/SMC indicators untuk setiap timeframe.
+    Menggunakan ICT engine: Market Structure, OB, FVG, Liquidity, Premium/Discount.
+    """
+    return calculate_ict_indicators(tf_data)
 def get_klines(symbol, interval='15', limit=200):
     """Ambil data candlestick dari Bybit dengan error handling"""
     try:
         with api_lock:
+            time.sleep(0.2)  # 200ms throttle → max 5 req/s, aman dari rate limit
             response = session.get_kline(
                 category="linear",
                 symbol=symbol,
@@ -815,8 +765,8 @@ def get_klines(symbol, interval='15', limit=200):
             df = df.iloc[::-1].reset_index(drop=True)
             return df
         elif response['retCode'] == 10006:  # Rate limit
-            print(f"⚠️  Rate limit hit for {symbol}")
-            # Don't send notification for every rate limit, just log
+            print(f"⚠️  Rate limit hit for {symbol} - waiting 2s...")
+            time.sleep(2)
             return None
         else:
             print(f"❌ API error for {symbol}: {response.get('retMsg', 'Unknown error')}")
@@ -940,8 +890,8 @@ def analyze_symbol(symbol):
         session_tf_config = SESSION_TF_CONFIG.get(current_session, SESSION_TF_CONFIG['LONDON'])
         
         print(f"🎯 ANALYZING {symbol} - SESSION: {current_session}")
-        print(f"   📊 TF Setup: {session_tf_config['bias_tf']}m bias → {session_tf_config['entry_tf']}m entry" + 
-              (f" → 1m trigger" if session_tf_config['use_trigger'] else ""))
+        print(f"   📊 ICT Swing: {session_tf_config['bias_tf']} bias → {session_tf_config['entry_tf']} entry" +
+              (f" → 1H trigger" if session_tf_config['use_trigger'] else ""))
         
         # 📊 GET MULTI-TIMEFRAME DATA
         tf_data = get_multi_timeframe_data(symbol, session_tf_config)
@@ -953,8 +903,9 @@ def analyze_symbol(symbol):
         if indicators is None:
             return None
         
-        # 🧠 MULTI-TIMEFRAME SIGNAL LOGIC
-        signal = analyze_multi_tf_signal(symbol, indicators, session_params, session_tf_config)
+        # 🧠 MULTI-STRATEGY SIGNAL LOGIC
+        from multi_strategy_system import run_all_strategies
+        signal = run_all_strategies(symbol, tf_data, session_params, session_tf_config)
         if signal is None:
             return None
         
@@ -1007,7 +958,7 @@ def analyze_symbol(symbol):
         signal['pos_size'] = pos_size
         signal['position_value_usd'] = position_value_usd
         
-        print(f"✅ {symbol} {signal['direction']} - {signal.get('setup_type', 'MULTI-TF')} - Risk: {risk_percent}% - Leverage: {signal['leverage']}x")
+        print(f"✅ {symbol} {signal['direction']} - {signal.get('strategy_label', signal.get('setup_type', 'ICT'))} | Score:{signal.get('ict_score',0)} | KZ:{signal.get('kill_zone_active',False)} | OB:{signal.get('in_order_block',False)} | FVG:{signal.get('in_fvg',False)} | Liq:{signal.get('liquidity_confirmed',False)} | R:R {signal.get('rr_ratio',0):.2f} | Risk:{risk_percent}% | {signal['leverage']}x")
         
         return signal
         
@@ -1016,150 +967,11 @@ def analyze_symbol(symbol):
         return None
 
 def analyze_multi_tf_signal(symbol, indicators, session_params, tf_config):
-    """Analyze multi-timeframe signals dengan session-specific logic"""
-    try:
-        bias_ind = indicators['bias']
-        entry_ind = indicators['entry']
-        trigger_ind = indicators['trigger']
-        atr_value = indicators['atr_value']
-        
-        current_session = session_params['session']
-        current_price = entry_ind['close']
-        
-        # 🧠 STEP 1: BIAS CHECK (15m) - Market Structure
-        bias_bullish = bias_ind['trend_bullish'] and bias_ind['macd_bullish']
-        bias_bearish = not bias_ind['trend_bullish'] and not bias_ind['macd_bullish']
-        
-        if not (bias_bullish or bias_bearish):
-            return None  # No clear bias
-        
-        # 📊 STEP 2: ENTRY SIGNAL (5m/3m) - Presisi Entry
-        entry_aligned = (bias_bullish and entry_ind['trend_bullish']) or (bias_bearish and not entry_ind['trend_bullish'])
-        entry_momentum = entry_ind['macd_bullish'] if bias_bullish else not entry_ind['macd_bullish']
-        
-        # Volume confirmation
-        volume_spike = entry_ind['volume'] > entry_ind['volume_avg'] * 1.2
-        
-        if not (entry_aligned and entry_momentum):
-            return None  # Entry tidak aligned dengan bias
-        
-        # ⚡ STEP 3: TRIGGER CHECK (1m) - Fine Timing (Opsional)
-        trigger_ok = True  # Default OK jika tidak pakai trigger
-        
-        if tf_config['use_trigger'] and trigger_ind is not None:
-            if bias_bullish:
-                trigger_ok = trigger_ind['above_ema'] and trigger_ind['momentum_up']
-            else:
-                trigger_ok = not trigger_ind['above_ema'] and not trigger_ind['momentum_up']
-        
-        if not trigger_ok:
-            return None  # Trigger timing tidak tepat
-        
-        # 🎯 STEP 4: SESSION-SPECIFIC LOGIC
-        if current_session == 'DEAD_ZONE':
-            # Conservative approach - hanya strong signals
-            if bias_ind['rsi'] < 35 or bias_ind['rsi'] > 65:
-                return None  # Avoid extreme RSI di dead zone
-        
-        elif current_session == 'ASIA':
-            # Mean reversion bias - look for oversold/overbought
-            if bias_bullish and entry_ind['rsi'] > 30:
-                return None  # Wait for deeper pullback
-            if bias_bearish and entry_ind['rsi'] < 70:
-                return None  # Wait for higher bounce
-        
-        elif current_session == 'LONDON':
-            # Breakout bias - momentum confirmation
-            if not volume_spike:
-                return None  # Volume confirmation wajib untuk breakout
-        
-        elif current_session == 'NEWYORK':
-            # High momentum - additional safety
-            if abs(bias_ind['rsi'] - 50) < 10:
-                return None  # Avoid neutral RSI di NY session
-        
-        # 💰 STEP 5: CALCULATE ENTRY, SL, TP
-        direction = "LONG" if bias_bullish else "SHORT"
-        
-        # SL & TP berdasarkan ATR (15m - stabil)
-        if direction == "LONG":
-            sl_price = current_price - (atr_value * SL_ATR_MULT)
-            tp_price = current_price + (atr_value * TP_ATR_MULT)
-        else:
-            sl_price = current_price + (atr_value * SL_ATR_MULT)
-            tp_price = current_price - (atr_value * TP_ATR_MULT)
-        
-        # Risk/Reward check
-        sl_distance = abs(current_price - sl_price)
-        tp_distance = abs(tp_price - current_price)
-        rr_ratio = tp_distance / sl_distance if sl_distance > 0 else 0
-        
-        if rr_ratio < 1.2:  # Minimum R:R 1.2:1 untuk scalping
-            return None
-        
-        # Leverage calculation
-        leverage = min(session_params['max_leverage'], 15)  # Cap at 15x untuk scalping
-        
-        # Entry zone (untuk presisi)
-        entry_buffer = atr_value * 0.1  # 10% ATR buffer
-        entry_low = current_price - entry_buffer
-        entry_high = current_price + entry_buffer
-        
-        signal = {
-            'symbol': symbol,
-            'direction': direction,
-            'close': current_price,
-            'entry_low': entry_low,
-            'entry_high': entry_high,
-            'sl': sl_price,
-            'tp': tp_price,
-            'leverage': leverage,
-            'atr_value': atr_value,
-            'sl_percent': (sl_distance / current_price) * 100,
-            'rr_ratio': rr_ratio,
-            'setup_type': f'MULTI-TF-{current_session}',
-            'lev_mode': f'{leverage}x',
-            'rsi_level': entry_ind['rsi'],
-            'volume_spike': volume_spike,
-            'session': current_session,
-            'tf_config': tf_config,
-            
-            # Technical details untuk analysis
-            'bias_bullish': bias_bullish,
-            'entry_aligned': entry_aligned,
-            'trigger_ok': trigger_ok,
-            'bias_rsi': bias_ind['rsi'],
-            'entry_rsi': entry_ind['rsi'],
-            'bias_macd': bias_ind['macd_line'] - bias_ind['signal_line'],
-            'entry_macd': entry_ind['macd_line'] - entry_ind['signal_line'],
-            
-            # CRITICAL: Add boolean indicators for AI reasoning
-            'ema_fast_above_slow': entry_ind['trend_bullish'],  # EMA trend
-            'macd_bullish': entry_ind['macd_bullish'],  # MACD signal
-            'rsi_oversold': entry_ind['rsi'] < 30,  # RSI oversold
-            'rsi_overbought': entry_ind['rsi'] > 70,  # RSI overbought
-            'rsi_neutral': 30 <= entry_ind['rsi'] <= 70,  # RSI neutral
-            'volume_confirmation': volume_spike,  # Volume confirmation
-            'volatility_confirmation': atr_value > 0,  # ATR volatility
-            'price_near_support': direction == "LONG" and entry_ind['rsi'] < 40,  # Support level for LONG
-            'price_near_resistance': direction == "SHORT" and entry_ind['rsi'] > 60,  # Resistance level for SHORT
-            'trend_alignment': entry_aligned,  # Multi-TF trend alignment
-            'momentum_confirmation': entry_momentum,  # Momentum confirmation
-            
-            # Numerical indicator values for AI analysis
-            'ema_fast_value': entry_ind.get('ema_fast', current_price),
-            'ema_slow_value': entry_ind.get('ema_slow', current_price),
-            'macd_line_value': entry_ind['macd_line'],
-            'signal_line_value': entry_ind['signal_line'],
-            'support_resistance': current_price,  # Current price as reference
-            'price_distance_from_level': 0.0  # Distance from key level
-        }
-        
-        return signal
-        
-    except Exception as e:
-        print(f"❌ Error in multi-TF signal analysis: {e}")
-        return None
+    """
+    ICT/SMC Signal Analysis - menggantikan EMA/MACD strategy lama.
+    Menggunakan: Market Structure, Order Block, FVG, Liquidity Sweep, Premium/Discount Zone.
+    """
+    return analyze_ict_signal(symbol, indicators, session_params, tf_config)
 
 # ==================
 # TELEGRAM COMMAND HANDLERS
@@ -1566,62 +1378,103 @@ async def handle_telegram_commands():
 # ==================
 # TELEGRAM NOTIFICATION
 # ==================
+
+async def _send_to_all(bot, message: str, parse_mode: str = 'HTML'):
+    """Kirim pesan ke semua target (personal + channel)"""
+    for target in TELEGRAM_TARGETS:
+        try:
+            await bot.send_message(chat_id=target, text=message, parse_mode=parse_mode)
+        except Exception as e:
+            print(f"⚠️ Failed to send to {target}: {e}")
+            try:
+                plain = __import__('re').sub(r'<[^>]+>', '', message)
+                await bot.send_message(chat_id=target, text=plain)
+            except Exception as e2:
+                print(f"❌ Plain text also failed for {target}: {e2}")
 async def send_telegram_alert(signal, trade_executed=True):
     """Kirim alert ke Telegram HANYA untuk trade yang berhasil dieksekusi"""
     if not trade_executed:
         print(f"⚠️ Skipping Telegram alert for {signal['symbol']} - Trade not executed")
         return False
-        
-    emoji = "📈" if signal['direction'] == "LONG" else "📉"
-    
-    # Message for EXECUTED trades only
-    message = f"""
-{emoji} <b>{signal['direction']} TRADE EXECUTED - {signal['symbol']}</b>
-🚀 POSITION OPENED
 
-💰 <b>Entry Price:</b> ${signal['close']:.6f}
-🎯 <b>Entry Zone:</b> ${signal['entry_low']:.6f} - ${signal['entry_high']:.6f}
-🛑 <b>Stop Loss:</b> ${signal['sl']:.6f}
-✅ <b>Take Profit:</b> ${signal['tp']:.6f}
+    direction = signal['direction']
+    emoji = "🟢" if direction == "LONG" else "🔴"
+    dir_arrow = "▲ LONG" if direction == "LONG" else "▼ SHORT"
 
-⚡ <b>Leverage:</b> {signal['leverage']}x ({signal['lev_mode']})
-💵 <b>Risk Amount:</b> ${signal['risk_amount']:.2f}
-📊 <b>Position Size:</b> {signal['pos_size']:.3f} coins
-💎 <b>Position Value:</b> ${signal['position_value_usd']:.2f} USDT
-📉 <b>SL %:</b> {signal['sl_percent']:.2f}%
-🎲 <b>R:R:</b> 1:{signal['rr_ratio']:.2f}
+    # Strategy info
+    strategy_name = signal.get('strategy', 'ICT_SMC')
+    strategy_label = signal.get('strategy_label', '📐 ICT/SMC')
+
+    # Setup info — safe .get() untuk semua field agar tidak KeyError
+    setup_type    = signal.get('setup_type', 'N/A')
+    ict_score     = signal.get('ict_score', 0)
+    session       = signal.get('session', 'UNKNOWN')
+    entry_price   = signal.get('close', 0)
+    sl            = signal.get('sl', 0)
+    tp            = signal.get('tp', 0)
+    leverage      = signal.get('leverage', 1)
+    risk_amount   = signal.get('risk_amount', 0)
+    pos_size      = signal.get('pos_size', 0)
+    pos_value     = signal.get('position_value_usd', 0)
+
+    # R:R hitung dari data yang ada
+    sl_dist = abs(entry_price - sl)
+    tp_dist = abs(tp - entry_price)
+    rr = tp_dist / sl_dist if sl_dist > 0 else 0
+    sl_pct = (sl_dist / entry_price * 100) if entry_price > 0 else 0
+
+    # Strategy-specific extra info line — sekarang selalu ICT_SMC
+    bos   = signal.get('bos_confirmed', False)
+    choch = signal.get('choch_detected', False)
+    in_ob = signal.get('in_order_block', False)
+    in_fvg= signal.get('in_fvg', False)
+    liq   = signal.get('liquidity_confirmed', False)
+    kz    = signal.get('kill_zone_active', False)
+    ob_b  = "✅OB" if in_ob else "⬜OB"
+    fvg_b = "✅FVG" if in_fvg else "⬜FVG"
+    liq_b = "✅LIQ" if liq else "⬜LIQ"
+    kz_b  = "✅KZ" if kz else "⬜KZ"
+    bos_b = "✅BOS" if bos else ("🔄CHoCH" if choch else "⬜BOS")
+    strategy_extra = f"🔍 {ob_b} {fvg_b} {liq_b} {kz_b} {bos_b}\n"
+
+    # Confirmators dari strategy lain
+    confirmators = signal.get('confirmators', [])
+    if confirmators:
+        strategy_extra += f"🤝 <b>Confirmed by:</b> {' · '.join(confirmators)}\n"
+
+    score_bar = "█" * min(ict_score, 10) + "░" * max(0, 10 - ict_score)
+
+    session_labels = {
+        'DEAD_ZONE': '🌙 Dead Zone', 'ASIA': '🌏 Asia',
+        'LONDON': '🇬🇧 London', 'NEWYORK': '🗽 New York',
+    }
+    session_label = session_labels.get(session, session)
+
+    message = f"""{emoji} <b>{dir_arrow} — {signal['symbol']}</b>
+━━━━━━━━━━━━━━━━━━━━━━
+🎯 <b>Strategy:</b> {strategy_label}
+🏷 <b>Setup:</b> <code>{setup_type}</code>  📍 {session_label}
+📊 <b>Score:</b> {ict_score}  <code>{score_bar}</code>
+{strategy_extra}━━━━━━━━━━━━━━━━━━━━━━
+💰 <b>Entry:</b> <code>${entry_price:.6f}</code>
+🛑 <b>SL:</b> <code>${sl:.6f}</code> ({sl_pct:.2f}%)
+✅ <b>TP:</b> <code>${tp:.6f}</code>
+⚖️ <b>R:R:</b> 1:{rr:.2f}  ⚡ {leverage}x
+💵 Risk: ${risk_amount:.2f}  📦 {pos_size:.4f} (${pos_value:.2f})
 """
 
-    # Add AI reasoning if available
+    # AI reasoning — max 2 kalimat
     if signal.get('ai_entry_reasoning') and signal['ai_entry_reasoning'].strip():
-        # Clean HTML tags for Telegram using improved function
         clean_reasoning = clean_html_for_telegram(signal['ai_entry_reasoning'])
-        
-        # Limit length for Telegram
-        if len(clean_reasoning) > 1500:
-            clean_reasoning = clean_reasoning[:1500] + "...\n\n[Analisis dipotong karena panjang pesan]"
-        
-        message += f"""
+        if len(clean_reasoning) > 300:
+            clean_reasoning = clean_reasoning[:300] + "…"
+        message += f"━━━━━━━━━━━━━━━━━━━━━━\n🤖 {clean_reasoning}\n"
 
-🤖 <b>AI ANALYSIS:</b>
-{clean_reasoning}
-"""
+    message += f"⏰ {datetime.now(timezone(timedelta(hours=7))).strftime('%d %b %Y  %H:%M:%S')} WIB\n<i>LevaTrade · {strategy_label}</i>"
 
-    # Add timestamp and branding
-    message += f"""
-
-⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-🚀 <i>Powered by LevaTrade</i>
-"""
-    
     try:
-        # Create bot instance inside async context
         bot = Bot(token=TELEGRAM_BOT_TOKEN)
-        await bot.send_message(
-            chat_id=TELEGRAM_CHAT_ID,
-            text=message,
-            parse_mode='HTML'
-        )
+        await _send_to_all(bot, message)
         print(f"✅ Telegram alert sent for {signal['symbol']}")
         return True
     except TelegramError as e:
@@ -1634,35 +1487,28 @@ async def send_telegram_alert(signal, trade_executed=True):
 async def send_ai_entry_reasoning_telegram(symbol, direction, ai_reasoning):
     """Kirim AI Entry Reasoning ke Telegram"""
     try:
-        emoji = "🤖" 
-        direction_emoji = "📈" if direction == "LONG" else "📉"
-        
-        # Clean HTML tags for Telegram using improved function
+        dir_emoji = "🟢" if direction == "LONG" else "🔴"
+        dir_label = "▲ LONG" if direction == "LONG" else "▼ SHORT"
+
         clean_reasoning = clean_html_for_telegram(ai_reasoning)
-        
-        # Limit message length (Telegram has 4096 char limit)
-        if len(clean_reasoning) > 3000:
-            clean_reasoning = clean_reasoning[:3000] + "...\n\n[Analisis dipotong karena panjang pesan]"
-        
-        message = f"""
-{emoji} <b>AI ENTRY ANALYSIS</b>
-{direction_emoji} <b>{symbol} {direction}</b>
+        if len(clean_reasoning) > 2800:
+            clean_reasoning = clean_reasoning[:2800] + "…"
+
+        message = f"""🤖 <b>AI Entry Analysis</b>
+{dir_emoji} <b>{symbol} — {dir_label}</b>
+━━━━━━━━━━━━━━━━━━━━━━
 
 {clean_reasoning}
 
-⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-🚀 <i>Powered by LevaTrade</i>
-"""
-        
+━━━━━━━━━━━━━━━━━━━━━━
+⏰ {datetime.now(timezone(timedelta(hours=7))).strftime('%d %b %Y  %H:%M:%S')} WIB
+<i>LevaTrade · ICT/SMC Engine</i>"""
+
         bot = Bot(token=TELEGRAM_BOT_TOKEN)
-        await bot.send_message(
-            chat_id=TELEGRAM_CHAT_ID,
-            text=message,
-            parse_mode='HTML'
-        )
+        await _send_to_all(bot, message)
         print(f"✅ AI Entry Reasoning sent to Telegram for {symbol}")
         return True
-        
+
     except Exception as e:
         print(f"❌ Error sending AI Entry Reasoning to Telegram: {e}")
         return False
@@ -1670,110 +1516,96 @@ async def send_ai_entry_reasoning_telegram(symbol, direction, ai_reasoning):
 async def send_ai_exit_reasoning_telegram(symbol, direction, exit_reason, pnl, ai_reasoning, entry_price=None, exit_price=None, duration_minutes=None):
     """Kirim AI Exit Reasoning ke Telegram dengan informasi trading lengkap"""
     try:
-        emoji = "🤖"
+        dir_emoji = "🟢" if direction == "LONG" else "🔴"
+        dir_label = "▲ LONG" if direction == "LONG" else "▼ SHORT"
         pnl_emoji = "💰" if pnl >= 0 else "💸"
-        direction_emoji = "📈" if direction == "LONG" else "📉"
-        
-        # Status berdasarkan exit reason
+        pnl_sign = "+" if pnl >= 0 else ""
+
+        # Exit status
         if exit_reason == "TP_HIT":
-            status_emoji = "🎯✅"
-            status_text = "TAKE PROFIT HIT"
+            status_emoji = "🎯"
+            status_text = "TAKE PROFIT ✅"
         elif exit_reason == "SL_HIT":
-            status_emoji = "🛑❌"
-            status_text = "STOP LOSS HIT"
+            status_emoji = "🛑"
+            status_text = "STOP LOSS ❌"
+        elif exit_reason == "PARTIAL_TP":
+            status_emoji = "📤"
+            status_text = "PARTIAL TP 📊"
+        elif exit_reason == "TIME_EXIT":
+            status_emoji = "⏱️"
+            status_text = "TIME EXIT ⌛"
+        elif exit_reason == "TRAILING_STOP":
+            status_emoji = "🔄"
+            status_text = "TRAILING STOP 🔒"
         else:
             status_emoji = "🚪"
             status_text = exit_reason
-        
-        # Format duration
+
+        # Duration
         duration_str = "N/A"
         if duration_minutes is not None:
-            hours = duration_minutes // 60
-            minutes = duration_minutes % 60
-            duration_str = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
-        
-        # Build message with trading details
-        entry_price_str = f"${entry_price:.6f}" if entry_price is not None else "$0.000000"
-        exit_price_str = f"${exit_price:.6f}" if exit_price is not None else "$0.000000"
-        
-        message = f"""
-{emoji} <b>AI EXIT ANALYSIS</b>
-{status_emoji} <b>{status_text}</b>
-{direction_emoji} <b>{symbol} {direction}</b>
+            h = int(duration_minutes // 60)
+            m = int(duration_minutes % 60)
+            duration_str = f"{h}h {m}m" if h > 0 else f"{m}m"
 
-💰 <b>Entry Price:</b> {entry_price_str}
-🎯 <b>Exit Price:</b> {exit_price_str}
-{pnl_emoji} <b>PnL:</b> ${pnl:.2f}
-⏱️ <b>Duration:</b> {duration_str}
+        entry_str = f"<code>${entry_price:.6f}</code>" if entry_price else "N/A"
+        exit_str = f"<code>${exit_price:.6f}</code>" if exit_price else "N/A"
+
+        # Price move %
+        move_pct_str = ""
+        if entry_price and exit_price and entry_price > 0:
+            move_pct = ((exit_price - entry_price) / entry_price) * 100
+            if direction == "SHORT":
+                move_pct = -move_pct
+            move_pct_str = f"  ({'+' if move_pct >= 0 else ''}{move_pct:.2f}%)"
+
+        message = f"""{status_emoji} <b>{status_text}</b>
+{dir_emoji} <b>{symbol} — {dir_label}</b>
+━━━━━━━━━━━━━━━━━━━━━━
+
+💰 <b>Entry:</b> {entry_str}
+🎯 <b>Exit:</b>  {exit_str}{move_pct_str}
+{pnl_emoji} <b>PnL:</b> <code>{pnl_sign}${pnl:.2f}</code>
+⏱️ <b>Durasi:</b> {duration_str}
 """
 
-        # Add AI reasoning if available
+        # AI reasoning
         if ai_reasoning and ai_reasoning.strip():
             try:
-                # Clean HTML tags for Telegram using improved function
                 clean_reasoning = clean_html_for_telegram(ai_reasoning)
-                
-                # Limit message length
-                if len(clean_reasoning) > 2000:
-                    clean_reasoning = clean_reasoning[:2000] + "...\n\n[Analisis dipotong karena panjang pesan]"
-                
+                if len(clean_reasoning) > 1800:
+                    clean_reasoning = clean_reasoning[:1800] + "…"
                 message += f"""
-
-🧠 <b>AI REASONING:</b>
+━━━━━━━━━━━━━━━━━━━━━━
+🧠 <b>AI Reasoning:</b>
 {clean_reasoning}
 """
-            except Exception as clean_error:
-                print(f"❌ Error cleaning AI reasoning HTML: {clean_error}")
-                # Fallback: strip all HTML tags
-                clean_reasoning = re.sub(r'<[^>]+>', '', ai_reasoning)
-                if len(clean_reasoning) > 2000:
-                    clean_reasoning = clean_reasoning[:2000] + "...\n\n[Analisis dipotong karena panjang pesan]"
-                
+            except Exception:
+                clean_reasoning = re.sub(r'<[^>]+>', '', ai_reasoning)[:1800]
                 message += f"""
-
-🧠 <b>AI REASONING:</b>
+━━━━━━━━━━━━━━━━━━━━━━
+🧠 <b>AI Reasoning:</b>
 {clean_reasoning}
 """
 
-        # Add timestamp and branding
         message += f"""
+━━━━━━━━━━━━━━━━━━━━━━
+⏰ {datetime.now(timezone(timedelta(hours=7))).strftime('%d %b %Y  %H:%M:%S')} WIB
+<i>LevaTrade · ICT/SMC Engine</i>"""
 
-⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-🚀 <i>Powered by LevaTrade</i>
-"""
-        
         bot = Bot(token=TELEGRAM_BOT_TOKEN)
-        
-        # Try sending with HTML parsing first
+
         try:
-            await bot.send_message(
-                chat_id=TELEGRAM_CHAT_ID,
-                text=message,
-                parse_mode='HTML'
-            )
+            await _send_to_all(bot, message)
             print(f"✅ AI Exit Reasoning sent to Telegram for {symbol}")
             return True
-            
         except Exception as html_error:
-            print(f"❌ HTML parsing error: {html_error}")
-            print(f"🔍 Problematic message length: {len(message)} chars")
-            
-            # Fallback: Send without HTML parsing
-            try:
-                # Strip all HTML tags for plain text
-                plain_message = re.sub(r'<[^>]+>', '', message)
-                await bot.send_message(
-                    chat_id=TELEGRAM_CHAT_ID,
-                    text=plain_message,
-                    parse_mode=None
-                )
-                print(f"✅ AI Exit Reasoning sent to Telegram (plain text) for {symbol}")
-                return True
-                
-            except Exception as plain_error:
-                print(f"❌ Failed to send even plain text: {plain_error}")
-                return False
-        
+            print(f"❌ HTML parse error: {html_error}")
+            plain = re.sub(r'<[^>]+>', '', message)
+            await _send_to_all(bot, plain)
+            print(f"✅ AI Exit Reasoning sent to Telegram (plain text) for {symbol}")
+            return True
+
     except Exception as e:
         print(f"❌ General error sending AI Exit Reasoning to Telegram: {e}")
         return False
@@ -1793,6 +1625,35 @@ def scan_symbols_parallel(symbols):
     
     return signals
 
+
+async def position_update_loop():
+    """
+    Background task: update harga & cek TP/SL posisi setiap 5 detik.
+    Berjalan independen dari scan loop — realtime monitoring.
+    """
+    while True:
+        try:
+            if DRY_RUN:
+                open_pos = dry_run_system.get_open_positions()
+                if open_pos:
+                    current_prices = {}
+                    for pos in open_pos:
+                        symbol = pos['symbol']
+                        df = get_klines(symbol, '1', 1)  # 1 candle terbaru
+                        if df is not None and len(df) > 0:
+                            current_prices[symbol] = df.iloc[-1]['close']
+
+                    if current_prices:
+                        await dry_run_system.update_positions(current_prices)
+
+            await asyncio.sleep(POSITION_UPDATE_INTERVAL)
+
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            print(f"⚠️ Position update error: {e}")
+            await asyncio.sleep(POSITION_UPDATE_INTERVAL)
+
 async def monitor_early_exits():
     """Monitor open positions for early exit conditions"""
     if not AUTO_TRADE_ENABLED or DRY_RUN:
@@ -1807,7 +1668,7 @@ async def monitor_early_exits():
         
         for symbol, position in current_positions.items():
             # Get current market data for the symbol (use ENTRY_TF for monitoring)
-            df = get_klines(symbol, ENTRY_TF, 50)  # Get recent data for indicators
+            df = get_klines(symbol, ENTRY_TF, 50)  # Get recent 4H data for indicators
             if df is None or len(df) < 20:
                 continue
             
@@ -1911,12 +1772,12 @@ async def main():
     # Check for existing instances
     check_single_instance()
     
-    print("🚀 Bot started (Multi-Timeframe Scalping Mode)...")
+    print("🚀 Bot started (Multi-Timeframe Swing Mode)...")
     print(f"⚡ Max Workers: {MAX_WORKERS} threads")
-    print(f"⏰ Multi-TF Setup: {BIAS_TF}m bias → {ENTRY_TF}m entry → {TRIGGER_TF}m trigger (session-dependent)")
+    print(f"⏰ Multi-TF Setup: {BIAS_TF} bias → {ENTRY_TF} entry → {TRIGGER_TF} trigger (session-dependent)")
     print(f"🔄 Scan Interval: {SCAN_INTERVAL//60} minutes {SCAN_INTERVAL%60} seconds")
     print(f"📊 Mode: {'ALL USDT PAIRS' if SCAN_ALL_USDT else f'TOP {TOP_VOLUME_COUNT} VOLUME'}")
-    print(f"📈 Indicators: Multi-TF EMA/RSI/MACD, ATR from {ATR_TF}m")
+    print(f"📈 Indicators: Multi-TF ICT/SMC, ATR from {ATR_TF}")
     
     # Show current session status
     print("\n📊 CURRENT SESSION STATUS:")
@@ -1951,8 +1812,8 @@ async def main():
         # Show timeframe setup per session
         print(f"\n🎯 TIMEFRAME SETUP PER SESSION:")
         for session, config in SESSION_TF_CONFIG.items():
-            trigger_text = f" → {TRIGGER_TF}m trigger" if config['use_trigger'] else ""
-            print(f"   {session}: {config['bias_tf']}m bias → {config['entry_tf']}m entry{trigger_text}")
+            trigger_text = f" → {TRIGGER_TF} trigger" if config['use_trigger'] else ""
+            print(f"   {session}: {config['bias_tf']} bias → {config['entry_tf']} entry{trigger_text}")
         
         # Check balance if live trading
         balance = 0
@@ -1990,7 +1851,11 @@ async def main():
     
     print(f"✅ Loaded {len(symbols)} symbols")
     print("-" * 50)
-    
+
+    # Start background position update task (realtime, tiap 5 detik)
+    pos_update_task = asyncio.create_task(position_update_loop())
+    print(f"🔄 Position update background task started (every {POSITION_UPDATE_INTERVAL}s)")
+
     scan_count = 0
     start_time = datetime.now()
     
@@ -2156,114 +2021,11 @@ async def main():
                         symbols = new_symbols
                         print(f"✅ Symbols refreshed")
                 
-                # Wait with dual interval system
+                # Wait sampai scan berikutnya
                 wait_minutes = SCAN_INTERVAL // 60
-                print(f"\n💤 Next signal scan in {wait_minutes} minutes, position updates every {POSITION_UPDATE_INTERVAL}s...")
+                print(f"\n💤 Next scan in {wait_minutes} minutes...")
                 print("-" * 50)
-                
-                # Sleep in 30-second intervals to allow position updates
-                for i in range(0, SCAN_INTERVAL, POSITION_UPDATE_INTERVAL):
-                    await asyncio.sleep(POSITION_UPDATE_INTERVAL)
-                    
-                    # Position update every 5 seconds during wait (ketat untuk SL/TP monitoring)
-                    if i > 0:  # Skip first iteration (i=0)
-                        print(f"\n📊 Position Update (during wait) at {datetime.now().strftime('%H:%M:%S')}")
-                        
-                        try:
-                            # Update positions for dry run
-                            if DRY_RUN:
-                                open_positions_symbols = [pos['symbol'] for pos in dry_run_system.get_open_positions()]
-                                if open_positions_symbols:
-                                    current_prices = {}
-                                    for symbol in open_positions_symbols:
-                                        df = get_klines(symbol, ENTRY_TF, 1)  # Use entry TF for updates
-                                        if df is not None and len(df) > 0:
-                                            current_prices[symbol] = df.iloc[-1]['close']
-                                    
-                                    if current_prices:
-                                        await dry_run_system.update_positions(current_prices)
-                                        print(f"   ✅ Updated {len(current_prices)} positions")
-                                        
-                                        # Check for time-based exits
-                                        current_positions = dry_run_system.get_open_positions()
-                                        positions_to_close = check_time_based_exits(current_positions)
-                                        
-                                        if positions_to_close:
-                                            print(f"   ⏰ Found {len(positions_to_close)} positions to close due to time limits")
-                                            
-                                            for position_to_close in positions_to_close:
-                                                symbol = position_to_close['symbol']
-                                                duration = position_to_close['duration_minutes']
-                                                max_duration = position_to_close['max_duration']
-                                                session = position_to_close['session']
-                                                
-                                                print(f"   ⏰🚪 Closing {symbol} - Duration: {duration:.1f}m > {max_duration}m ({session})")
-                                                
-                                                # Close position in dry run system
-                                                await dry_run_system.close_position(symbol, "TIME_STOP")
-                                                
-                                                # Remove from time tracking
-                                                remove_position_tracking(symbol)
-                                                
-                                                # Send notification
-                                                try:
-                                                    from time_based_stop_system import send_time_stop_notification
-                                                    await send_time_stop_notification(position_to_close)
-                                                except ImportError:
-                                                    print(f"   ⚠️ Time stop notification not available")
-                                                except Exception as e:
-                                                    print(f"   ⚠️ Time stop notification error: {e}")
-                            
-                            # Early exit monitoring for real trading
-                            if AUTO_TRADE_ENABLED and not DRY_RUN:
-                                await monitor_early_exits()
-                                
-                                # Check for time-based exits in real trading
-                                current_positions = get_open_positions()
-                                if current_positions:
-                                    # Convert real positions to format expected by time-based stop
-                                    positions_list = []
-                                    for symbol, pos in current_positions.items():
-                                        positions_list.append({
-                                            'symbol': symbol,
-                                            'direction': pos.get('side', 'UNKNOWN').upper(),
-                                            'entry_price': pos.get('entry_price', 0),
-                                            'current_price': 0,  # Will be updated
-                                            'unrealized_pnl': pos.get('unrealized_pnl', 0)
-                                        })
-                                    
-                                    positions_to_close = check_time_based_exits(positions_list)
-                                    
-                                    if positions_to_close:
-                                        print(f"   ⏰ Found {len(positions_to_close)} real positions to close due to time limits")
-                                        
-                                        for position_to_close in positions_to_close:
-                                            symbol = position_to_close['symbol']
-                                            duration = position_to_close['duration_minutes']
-                                            max_duration = position_to_close['max_duration']
-                                            session = position_to_close['session']
-                                            
-                                            print(f"   ⏰🚪 Would close REAL position {symbol} - Duration: {duration:.1f}m > {max_duration}m ({session})")
-                                            
-                                            # TODO: Implement real position closing
-                                            # For now, just remove from tracking and send notification
-                                            remove_position_tracking(symbol)
-                                            try:
-                                                from time_based_stop_system import send_time_stop_notification
-                                                await send_time_stop_notification(position_to_close)
-                                            except ImportError:
-                                                print(f"   ⚠️ Time stop notification not available")
-                                            except Exception as e:
-                                                print(f"   ⚠️ Time stop notification error: {e}")
-                                
-                        except Exception as e:
-                            print(f"   ❌ Error in position update: {e}")
-                            await error_notifier.notify_trading_error(
-                                "position_update_error",
-                                "POSITION_UPDATE",
-                                {'error_message': str(e)},
-                                e
-                            )
+                await asyncio.sleep(SCAN_INTERVAL)
                 
             except KeyboardInterrupt:
                 print("\n👋 Bot stopped by user")
@@ -2280,8 +2042,10 @@ async def main():
     
     except KeyboardInterrupt:
         print("\n👋 Bot stopped by user")
+        pos_update_task.cancel()
     except Exception as e:
         print(f"❌ Fatal error: {e}")
+        pos_update_task.cancel()
         await error_notifier.notify_trading_error(
             "fatal_error",
             "MAIN_FUNCTION",
