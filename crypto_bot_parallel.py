@@ -15,7 +15,6 @@ from dry_run_system import dry_run_system
 from early_exit_system import early_exit_system
 from error_notification_system import error_notifier, notify_insufficient_balance, notify_order_rejected
 from gemini_ai_system import get_gemini_analyst
-from openclaw_ai_system import consult_gate
 from progressive_risk_system import progressive_risk_system
 from hard_stop_system import hard_stop_system
 from trading_control_system import is_trading_enabled
@@ -441,21 +440,6 @@ async def execute_trade(signal):
             print(f"⚠️  Position size too small for {symbol}: ${position_value_usd:.2f} < ${MIN_POSITION_SIZE_USD}")
             return False
         
-        # ── OpenClaw pre-trade gate ───────────────────────────────────────────
-        trade_mode = 'dry_run' if DRY_RUN else 'real'
-        gate_result = await consult_gate(signal, trade_mode)
-        if not gate_result.get('approved', True):
-            print(f"🦞 [OPENCLAW GATE] REJECTED {symbol} {direction}: {gate_result.get('reason')}")
-            return False
-        else:
-            stats = gate_result.get('stats', {})
-            sym_stats = stats.get('symbol_stats', {})
-            if sym_stats.get('total', 0) > 0:
-                print(f"🦞 [OPENCLAW GATE] APPROVED {symbol} {direction} "
-                      f"(WR={sym_stats.get('win_rate')}%, {sym_stats.get('total')} trades)")
-            else:
-                print(f"🦞 [OPENCLAW GATE] APPROVED {symbol} {direction} (no history yet)")
-
         # ── Generate AI entry reasoning ───────────────────────────────────────
         try:
             gemini_analyst = get_gemini_analyst()
